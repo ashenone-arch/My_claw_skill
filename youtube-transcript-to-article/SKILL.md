@@ -1,7 +1,7 @@
 ---
 name: youtube-transcript-to-article
 description: 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成完整书面文章并保存为 .md 文件。
-version: 1.0
+version: v1.0
 ---
 
 # YouTube 视频字幕转书面文章
