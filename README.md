@@ -44,3 +44,28 @@
 
 本仓库中的 Skill 仅供个人投资研究使用，不构成任何投资建议。
 投资有风险，决策需谨慎。
+
+## pdf-batch-extract (v1.1) | PDF 批量原文提取
+
+将文件夹内多个 PDF 统一提取原文和表格为 MD 文件。
+
+**触发词**：批量提取 PDF / PDF 转 Markdown / 提取 PDF 表格
+
+**目录结构**：
+```
+pdf-batch-extract/
+├── SKILL.md              主入口（步骤0环境预检 + 步骤1.5水印检测）
+├── scripts/
+│   └── extract_pdf_to_md.py  核心提取脚本（已从 SKILL.md 拆分）
+├── WATERMARK.md          水印清理专项（按需加载）
+└── QUICKREF.md           快速参考表
+```
+
+**v1.1 更新内容**：
+- ✅ 环境预检（步骤0）：先检查 pdfplumber，避免重复安装
+- ✅ 水印检测（步骤1.5）：自动检测前3页，询问用户水印内容后精准清理
+- ✅ Python 脚本拆分：173行代码移入 scripts/，SKILL.md 保持纯流程指引
+- ✅ 水印清理专项 WATERMARK.md：奇偶位字符分类 + 6条清理规则 + 词间修复表
+- ✅ 快速参考表 QUICKREF.md：场景决策速查 + 常见问题处理
+- ✅ TRAPS 警告区块：易错陷阱显式化（不重复安装/水印先问后清/分批防超时等）
+
