@@ -12,6 +12,7 @@
 | [howard-marks-framework](howard-marks-framework/) | 霍华德·马克斯投资框架，评估标的/审查组合 | v1.0 |
 | [skill-sync](skill-sync/) | GitHub Skill 同步工具，自动检测并同步本地与仓库版本 | v1.0 |
 | [youtube-transcript-to-article](youtube-transcript-to-article/) | YouTube视频字幕转书面文章 | v1.0 |
+| [pdf-batch-extract](pdf-batch-extract/) | PDF 批量原文+表格提取为 MD，含页眉/页脚/页码自动清理 | v1.0 |
 
 ## 使用方式
 
