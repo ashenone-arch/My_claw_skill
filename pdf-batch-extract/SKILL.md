@@ -1,6 +1,6 @@
 ---
 name: pdf-batch-extract
-version: v2.0
+version: v1.1
 description: 当用户需要将文件夹内多个 PDF 统一提取原文和表格为 MD 文件时使用。即使用户说"批量提取 PDF"、"把 PDF 转成 Markdown"、"读取 PDF 原文"、"提取 PDF 表格"、"将文件夹内所有 PDF 转为 md"、"PDF 批量转 markdown"、"把 PDF 里的表格导出来"、"PDF 原文提取"、"帮我把这个文件夹的 PDF 都转成 md"也应触发。NOT for：单篇 PDF 的简单格式转换（用 read 工具直接读即可）；需要对话交叉分析的场景（用 cross-talk-synthesis）；PDF 合并/拆分/旋转/加密操作。
 ---
 
