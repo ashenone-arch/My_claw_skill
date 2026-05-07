@@ -1,292 +1,173 @@
-#!/usr/bin/env python3
-"""
-PDF 批量原文 + 表格提取工具
-用法：
-  python extract_pdf_to_md.py <pdf_dir> [output_dir]    批量处理目录下所有 PDF
-  python extract_pdf_to_md.py --single <pdf_path> <output_dir>  处理单个 PDF
-"""
-
-import pdfplumber
-import os
-import json
-import re
-import sys
+import re, os, json, pdfplumber
 from collections import Counter
+from pathlib import Path
 
+def detect_headers_footers(pdf_path, sample_pages=5):
+    """统计所有页面首行/末行，出现次数>=阈值则识别为页眉/页脚"""
+    header_candidates = Counter()
+    footer_candidates = Counter()
 
-# ============================================================================
-# 页眉 / 页脚 / 页码清理
-# ============================================================================
+    with pdfplumber.open(pdf_path) as pdf:
+        pages_to_check = pdf.pages[:sample_pages] if len(pdf.pages) > sample_pages else pdf.pages
 
-SKIP_PATTERNS = [
-    re.compile(r'^\s*\d+\s*$'),                               # 纯页码
-    re.compile(r'^\s*\d+\s*/\s*\d+\s*$'),                     # X / Y
-    re.compile(r'^\s*Page\s+\d+\s+of\s+\d+\s*$', re.IGNORECASE),
-    re.compile(r'^\s*第\s*\d+\s*页\s*$'),                     # 第 X 页
-    re.compile(r'^\s*页码[:：]?\s*\d+\s*$', re.IGNORECASE),
-    re.compile(r'^\s*私有[保秘]?定[密]?[文件资料]?\s*$'),
-    re.compile(r'^\s*[Cc]onfidential\s*$'),
-    re.compile(r'^\s*[Ii]nternal\s+[Uu]se\s+[Oo]nly\s*$'),
-    re.compile(r'^\s*内部文件\s*$'),
-    re.compile(r'^\s*免责声明\s*$'),
-    re.compile(r'^\s*请务必阅读正文之后的信息披露和法律声明\s*$'),
-]
+        for page in pages_to_check:
+            text = page.extract_text()
+            if not text:
+                continue
+            lines = text.split('\n')
+            if lines:
+                first = lines[0].strip()
+                last = lines[-1].strip()
+                if len(first) <= 200 and first:
+                    header_candidates[first] += 1
+                if len(last) <= 200 and last:
+                    footer_candidates[last] += 1
 
+    threshold = max(2, len(pdf.pages) // 10)
+    headers = {k for k, v in header_candidates.items() if v >= threshold}
+    footers = {k for k, v in footer_candidates.items() if v >= threshold}
+    return headers, footers
 
-def detect_headers_footers(pdf):
-    """
-    统计多页首行/末行，识别反复出现的页眉和页脚。
-    返回 (header_candidates, footer_candidates)。
-    """
-    first_lines = []
-    last_lines = []
-    for page in pdf.pages:
-        t = page.extract_text()
-        if not t:
-            continue
-        lines = [l.strip() for l in t.split('\n') if l.strip()]
-        if len(lines) >= 2:
-            first_lines.append(lines[0])
-            last_lines.append(lines[-1])
-        elif len(lines) == 1:
-            first_lines.append(lines[0])
-
-    header_candidates = {l for l, c in Counter(first_lines).items() if c >= 2}
-    footer_candidates = {l for l, c in Counter(last_lines).items() if c >= 2}
-    return header_candidates, footer_candidates
-
-
-def clean_page_text(text, header_candidates=None, footer_candidates=None):
-    """清理单页文本：去除页码、页眉、页脚。"""
+def clean_text_block(text, headers, footers, wm_chars=None):
+    """清理页眉/页脚/页码，可选水印清理"""
     lines = text.split('\n')
     cleaned = []
-    header_set = set(h.strip() for h in header_candidates) if header_candidates else set()
-    footer_set = set(f.strip() for f in footer_candidates) if footer_candidates else set()
-
     for line in lines:
-        stripped = line.strip()
-        if not stripped:
+        s = line.strip()
+        # 跳过页眉
+        if s in headers:
             continue
-        if any(p.match(stripped) for p in SKIP_PATTERNS):
+        # 跳过页脚
+        if s in footers:
             continue
-        if stripped in header_set:
+        # 跳过页码行
+        if re.match(r'^\d+$', s):
             continue
-        if stripped in footer_set:
-            continue
+        # 水印清理：水印字符混入行间时移除（前后都是中文的水印字）
+        if wm_chars:
+            result = []
+            i = 0
+            while i < len(s):
+                c = s[i]
+                if c in wm_chars:
+                    prev = result[-1] if result else ''
+                    nxt = s[i+1] if i+1 < len(s) else ''
+                    if prev and '\u4e00' <= prev <= '\u9fff' and nxt and '\u4e00' <= nxt <= '\u9fff':
+                        i += 1
+                        continue
+                result.append(c)
+                i += 1
+            line = ''.join(result)
         cleaned.append(line)
-
     return '\n'.join(cleaned)
 
-
-# ============================================================================
-# 表格提取 & Markdown 格式化
-# ============================================================================
-
-def format_table_as_markdown(table):
-    """将 pdfplumber 提取的表格（list of lists）转为 Markdown 表格。"""
-    if not table or len(table) < 1:
-        return ""
-
-    # 清洗单元格内容：去除首尾空白、将换行替换为空格
-    rows = []
-    for row in table:
-        cleaned_row = [str(cell).strip().replace('\n', ' ') if cell else '' for cell in row]
-        # 跳过全空行
-        if any(c for c in cleaned_row):
-            rows.append(cleaned_row)
-
-    if not rows:
-        return ""
-
-    max_cols = max(len(row) for row in rows)
-    for row in rows:
-        while len(row) < max_cols:
-            row.append('')
-
-    lines = []
-    lines.append('| ' + ' | '.join(rows[0]) + ' |')
-    lines.append('| ' + ' | '.join(['---'] * max_cols) + ' |')
-    for row in rows[1:]:
-        lines.append('| ' + ' | '.join(row) + ' |')
-
-    return '\n'.join(lines)
-
-
-# ============================================================================
-# 单页内容提取（文本 + 表格）
-# ============================================================================
-
-def extract_page_content(page, header_candidates, footer_candidates, page_num):
-    """
-    从单页同时提取文本和表格。
-    文本先行，表格追加，保持同页上下文关联。
-    """
-    parts = []
-    page_header = f"--- 第 {page_num} 页 ---"
-
-    # 提取文本
-    text = page.extract_text()
-    has_text = text and text.strip()
-
-    # 提取表格
-    tables = page.extract_tables()
-    has_tables = tables and any(t for t in tables)
-
-    if not has_text and not has_tables:
-        return ""
-
-    parts.append(page_header)
-
-    # 文本部分
-    if has_text:
-        cleaned = clean_page_text(text, header_candidates, footer_candidates)
-        if cleaned.strip():
-            parts.append(cleaned)
-
-    # 表格部分
-    if has_tables:
-        table_count = 0
-        for t in tables:
-            if not t:
+def extract_tables_markdown(tables, page_num):
+    """将 pdfplumber 表格转为 Markdown"""
+    md_parts = []
+    for idx, table in enumerate(tables, 1):
+        if not table:
+            continue
+        # 跳过全空表格
+        non_empty = [r for r in table if any(c for c in r)]
+        if len(non_empty) < 2:
+            continue
+        md_parts.append(f"\n**表 {page_num}-{idx}:**\n")
+        # 逐行输出
+        for row_idx, row in enumerate(non_empty):
+            cells = [str(c).strip().replace('\n', ' ') if c else '' for c in row]
+            if all(c == '' for c in cells):
                 continue
-            md_table = format_table_as_markdown(t)
-            if md_table:
-                table_count += 1
-                parts.append(f"\n**表 {page_num}-{table_count}：**\n\n{md_table}")
+            if row_idx == 0:
+                md_parts.append('| ' + ' | '.join(cells) + ' |\n')
+                md_parts.append('| ' + ' | '.join(['---'] * len(cells)) + ' |\n')
+            else:
+                md_parts.append('| ' + ' | '.join(cells) + ' |\n')
+    return ''.join(md_parts)
 
-    return '\n\n'.join(parts)
+def extract_pdf(pdf_path, output_dir, wm_chars=None):
+    """提取单个 PDF，返回 (md_path, page_count, table_count)"""
+    filename = os.path.basename(pdf_path)
+    basename = os.path.splitext(filename)[0]
+    out_path = os.path.join(output_dir, basename + '.md')
 
-
-# ============================================================================
-# 单 PDF 处理
-# ============================================================================
-
-def process_pdf(pdf_path, output_dir):
-    """处理单个 PDF：提取文本 + 表格，输出同名 .md 文件。"""
-    pdf_name = os.path.basename(pdf_path)
-    md_name = os.path.splitext(pdf_name)[0] + '.md'
-    md_path = os.path.join(output_dir, md_name)
+    headers, footers = detect_headers_footers(pdf_path)
 
     with pdfplumber.open(pdf_path) as pdf:
         total_pages = len(pdf.pages)
-
-        # 全局页眉页脚识别
-        header_candidates, footer_candidates = detect_headers_footers(pdf)
-
         all_content = []
 
-        if total_pages > 20:
-            batch_size = 10
-            for batch_start in range(0, total_pages, batch_size):
-                batch_end = min(batch_start + batch_size, total_pages)
-                batch_parts = []
-                for i in range(batch_start, batch_end):
-                    content = extract_page_content(
-                        pdf.pages[i], header_candidates, footer_candidates, i + 1
-                    )
-                    if content:
-                        batch_parts.append(content)
-                if batch_parts:
-                    all_content.append('\n\n'.join(batch_parts))
-        else:
-            for i, page in enumerate(pdf.pages):
-                content = extract_page_content(
-                    page, header_candidates, footer_candidates, i + 1
-                )
-                if content:
-                    all_content.append(content)
+        # 批量处理，每批10页
+        batch_size = 10
+        for batch_start in range(0, total_pages, batch_size):
+            batch_end = min(batch_start + batch_size, total_pages)
+            for page_num in range(batch_start + 1, batch_end + 1):
+                page = pdf.pages[page_num - 1]
 
-    full_text = '\n\n'.join(all_content)
+                text = page.extract_text()
+                if text:
+                    cleaned = clean_text_block(text, headers, footers, wm_chars)
+                    if cleaned.strip():
+                        all_content.append(f"\n--- 第 {page_num} 页 ---\n{cleaned}")
 
-    with open(md_path, 'w', encoding='utf-8') as f:
-        f.write(f"# {os.path.splitext(pdf_name)[0]}\n\n")
-        f.write(f"> 来源：{pdf_name}  |  共 {total_pages} 页\n\n")
-        f.write("---\n\n")
-        f.write(full_text)
+                tables = page.extract_tables()
+                if tables:
+                    table_md = extract_tables_markdown(tables, page_num)
+                    if table_md.strip():
+                        all_content.append(table_md)
 
-    return {
-        "file": pdf_name,
-        "status": "成功",
-        "pages": total_pages,
-        "md": md_name,
-        "md_path": md_path,
-    }
+        output = f"""---
+# {basename}
 
+> 来源：{filename}  |  共 {total_pages} 页
 
-# ============================================================================
-# 入口
-# ============================================================================
+---
 
-def main():
-    single_mode = False
-    pdf_path = None
-    pdf_dir = None
-    output_dir = None
+""" + '\n'.join(all_content)
 
-    args = sys.argv[1:]
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write(output)
 
-    if '--single' in args or '-s' in args:
-        single_mode = True
-        idx = args.index('--single') if '--single' in args else args.index('-s')
-        args.pop(idx)
-        if len(args) < 2:
-            print("用法: python extract_pdf_to_md.py --single <pdf_path> <output_dir>")
-            sys.exit(1)
-        pdf_path = args[0]
-        output_dir = args[1]
-    else:
-        if len(args) < 1:
-            print("用法: python extract_pdf_to_md.py <pdf_dir> [output_dir]")
-            sys.exit(1)
-        pdf_dir = args[0]
-        output_dir = args[1] if len(args) > 1 else pdf_dir
+    table_count = sum(len(page.extract_tables() or []) for page in pdf.pages)
+    return out_path, total_pages, table_count
 
-    if single_mode:
-        # 单文件模式
-        pdf_name = os.path.basename(pdf_path)
-        print(f"处理：{pdf_name}")
+def batch_extract(pdf_dir, wm_chars=None):
+    """批量提取目录下所有 PDF"""
+    pdf_dir = Path(pdf_dir)
+    pdf_files = sorted(pdf_dir.glob('*.pdf')) + sorted(pdf_dir.glob('*.PDF'))
+
+    results = []
+    for pdf_path in pdf_files:
         try:
-            result = process_pdf(pdf_path, output_dir)
-            print(json.dumps(result, ensure_ascii=False))
+            out_path, page_count, table_count = extract_pdf(str(pdf_path), str(pdf_dir), wm_chars)
+            results.append({
+                'pdf': pdf_path.name,
+                'status': 'success',
+                'pages': page_count,
+                'tables': table_count,
+                'md': Path(out_path).name
+            })
         except Exception as e:
-            print(json.dumps({
-                "file": pdf_name, "status": f"失败: {e}", "pages": 0, "md": None, "error": str(e)
-            }, ensure_ascii=False))
-            sys.exit(1)
-    else:
-        # 批量模式
-        pdf_files = sorted([f for f in os.listdir(pdf_dir) if f.lower().endswith('.pdf')])
+            results.append({
+                'pdf': pdf_path.name,
+                'status': 'failed',
+                'error': str(e)
+            })
 
-        # 先扫描页数
-        print(f"找到 {len(pdf_files)} 个 PDF 文件：")
-        file_info = []
-        for f in pdf_files:
-            fp = os.path.join(pdf_dir, f)
-            with pdfplumber.open(fp) as pdf:
-                pages = len(pdf.pages)
-                file_info.append((f, pages))
-                print(f"  {len(file_info)}. {f}（{pages} 页）")
+    summary_path = pdf_dir / '_pdf_extract_summary.json'
+    with open(summary_path, 'w', encoding='utf-8') as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
 
-        results = []
-        for pdf_name, _ in file_info:
-            fp = os.path.join(pdf_dir, pdf_name)
-            try:
-                result = process_pdf(fp, output_dir)
-                results.append(result)
-                print(f"✓ {pdf_name} → {result['md']}")
-            except Exception as e:
-                results.append({
-                    "file": pdf_name, "status": f"失败: {e}", "pages": 0, "md": None, "error": str(e)
-                })
-                print(f"✗ {pdf_name} 失败: {e}")
-
-        # 保存汇总
-        summary_path = os.path.join(output_dir, '_pdf_extract_summary.json')
-        with open(summary_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
-
-        print(f"\n汇总已保存至：{summary_path}")
-
+    return results
 
 if __name__ == '__main__':
-    main()
+    import sys
+    if len(sys.argv) == 1:
+        print("Usage: python extract_pdf_to_md.py <pdf_dir>")
+    elif len(sys.argv) == 2:
+        pdf_dir = sys.argv[1]
+        results = batch_extract(pdf_dir)
+        for r in results:
+            status = f"✓ {r['pdf']} ({r.get('pages','?')}页, {r.get('tables',0)}表)" if r['status']=='success' else f"✗ {r['pdf']}: {r.get('error','')}"
+            print(status)
+    else:
+        print("不支持的参数，请参考 SKILL.md")
