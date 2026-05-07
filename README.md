@@ -11,17 +11,9 @@
 | [equity-deep-research](equity-deep-research/) | A股股票深度研究，9段框架输出投研素材包 | v1.0 |
 | [howard-marks-framework](howard-marks-framework/) | 霍华德·马克斯投资框架，评估标的/审查组合 | v1.0 |
 | [skill-sync](skill-sync/) | GitHub Skill 同步工具，自动检测并同步本地与仓库版本 | v1.0 |
-| [wechat-article-search](wechat-article-search/) | 微信公众号文章搜索，按关键词检索中文资讯 | v1.0 |
 | [youtube-transcript-to-article](youtube-transcript-to-article/) | YouTube视频字幕转书面文章 | v1.0 |
-| [youtube-watcher](youtube-watcher/) | YouTube视频文稿读取与内容问答 | v1.0 |
-| [pdf-batch-extract](pdf-batch-extract/) | PDF 批量原文+表格提取为 MD，含页眉/页脚/页码自动清理 | v1.0 |
+| [pdf-batch-extract](pdf-batch-extract/) | PDF 批量原文+表格提取为 MD，含页眉/页脚/页码自动清理 | v1.1 |
 
-### cross-talk-synthesis v1.1 更新亮点
-
-- **先快扫后深挖**：文件过多时先展示「内容地图」让用户选定话题，再针对性深度提取
-- **模块化架构**：核心流程（SKILL.md）+ 写作标准（WRITING-STANDARDS.md）+ 大批量策略（BATCH-STRATEGY.md）+ PDF 处理（PDF-GUIDE.md）
-- **分层撰写**：用户选定话题深度展开，非选定话题仅简要提及（≤全文 20%）
-- **决策速查表**：工具选择、Agent 类型、文件数量分级一目了然
 
 ## 使用方式
 
@@ -44,28 +36,4 @@
 
 本仓库中的 Skill 仅供个人投资研究使用，不构成任何投资建议。
 投资有风险，决策需谨慎。
-
-## pdf-batch-extract (v1.1) | PDF 批量原文提取
-
-将文件夹内多个 PDF 统一提取原文和表格为 MD 文件。
-
-**触发词**：批量提取 PDF / PDF 转 Markdown / 提取 PDF 表格
-
-**目录结构**：
-```
-pdf-batch-extract/
-├── SKILL.md              主入口（步骤0环境预检 + 步骤1.5水印检测）
-├── scripts/
-│   └── extract_pdf_to_md.py  核心提取脚本（已从 SKILL.md 拆分）
-├── WATERMARK.md          水印清理专项（按需加载）
-└── QUICKREF.md           快速参考表
-```
-
-**v1.1 更新内容**：
-- ✅ 环境预检（步骤0）：先检查 pdfplumber，避免重复安装
-- ✅ 水印检测（步骤1.5）：自动检测前3页，询问用户水印内容后精准清理
-- ✅ Python 脚本拆分：173行代码移入 scripts/，SKILL.md 保持纯流程指引
-- ✅ 水印清理专项 WATERMARK.md：奇偶位字符分类 + 6条清理规则 + 词间修复表
-- ✅ 快速参考表 QUICKREF.md：场景决策速查 + 常见问题处理
-- ✅ TRAPS 警告区块：易错陷阱显式化（不重复安装/水印先问后清/分批防超时等）
 
