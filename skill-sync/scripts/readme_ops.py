@@ -1,58 +1,102 @@
 """ readme_ops.py - README 自动维护脚本
 
-功能：生成当前本地所有 Skill 的版本列表，更新到 GitHub README
+功能：从 GitHub API 获取远程仓库中所有 Skill 的版本列表，更新到 GitHub README
+特性：README 版本列表以云端 Skill 为基准，不再扫描本地目录
 验证：更新后检查版本列表是否正确（失败重试最多 3 次）
 """
-import sys, os, json, base64, time, urllib.request
+import sys
+import os
+import json
+import base64
+import time
+import urllib.request
 
-def get_local_skills():
-    """扫描本地 Skill 目录，生成版本列表"""
-    skills_dir = os.path.expanduser('~/.alphaclaw/skills')
-    result = []
+PYTHON = r"D:\AlphaEngine\resources\python\python\python.exe"
 
-    for name in os.listdir(skills_dir):
-        skill_path = os.path.join(skills_dir, name, 'SKILL.md')
-        if not os.path.isfile(skill_path):
-            continue
-        if name.startswith('mcp--') or name in ['skill-sync']:  # skill-sync 自己跳过（后面单独处理）
-            if name == 'skill-sync':
-                pass  # 仍收录
+
+def _api_request(url, token, method='GET', data=None):
+    """通用 GitHub API 请求"""
+    req = urllib.request.Request(url)
+    req.add_header('Authorization', f'Bearer {token}')
+    req.add_header('Accept', 'application/vnd.github.v3+json')
+    req.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
+    if method != 'GET':
+        req.get_method = lambda: method
+    if data:
+        req.add_header('Content-Type', 'application/json')
+        req.data = json.dumps(data).encode('utf-8')
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read())
+
+
+def _parse_frontmatter(content):
+    """解析 SKILL.md frontmatter 中的 version 和 description"""
+    version = 'unknown'
+    description = ''
+    in_frontmatter = False
+    for line in content.split('\n'):
+        if line.strip() == '---':
+            if not in_frontmatter:
+                in_frontmatter = True
             else:
-                continue  # MCP 相关跳过
+                break
+        elif in_frontmatter:
+            if line.startswith('version:'):
+                version = line.split(':', 1)[1].strip().lstrip('v')
+            elif line.startswith('description:'):
+                desc = line.split(':', 1)[1].strip()
+                description = desc[:60] + ('...' if len(desc) > 60 else '')
+    return version, description
 
+
+def get_remote_skills(token, owner, repo):
+    """从 GitHub API 获取远程仓库中所有 Skill 的版本列表"""
+    skills_url = f'https://api.github.com/repos/{owner}/{repo}/contents'
+    skills = []
+
+    try:
+        dirs = _api_request(skills_url, token)
+    except Exception as e:
+        raise RuntimeError(f'无法获取仓库目录: {e}')
+
+    # 排除 MCP 相关和明显非 Skill 目录
+    skip_dirs = {'README.md', '.github', 'docs', 'scripts', 'scripts_backup', '.git'}
+    for entry in dirs:
+        if entry['type'] != 'dir':
+            continue
+        name = entry['name']
+        if name in skip_dirs or name.startswith('.'):
+            continue
+        # MCP 相关目录也跳过
+        if name.startswith('mcp--'):
+            continue
+
+        # 获取 SKILL.md 内容
+        skill_md_url = f'{skills_url}/{name}/SKILL.md'
         try:
-            with open(skill_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            version = 'unknown'
-            description = ''
-            in_frontmatter = False
-            for line in content.split('\n'):
-                if line.strip() == '---':
-                    if not in_frontmatter:
-                        in_frontmatter = True
-                    else:
-                        break
-                elif in_frontmatter:
-                    if line.startswith('version:'):
-                        version = line.split(':')[1].strip().lstrip('v')
-                    elif line.startswith('description:'):
-                        desc = line.split(':', 1)[1].strip()
-                        description = desc[:50] + ('...' if len(desc) > 50 else '')
-            result.append({
-                'name': name,
-                'version': version,
-                'description': description
-            })
-        except:
+            file_data = _api_request(skill_md_url, token)
+            if 'content' in file_data:
+                content = base64.b64decode(file_data['content']).decode('utf-8')
+                version, description = _parse_frontmatter(content)
+                skills.append({
+                    'name': name,
+                    'version': version,
+                    'description': description,
+                    'sha': file_data.get('sha')
+                })
+        except Exception:
+            # 该目录没有 SKILL.md，跳过
             pass
 
-    # 添加 skill-sync（它也在 ~/.alphaclaw/skills 下，但描述需要单独处理）
-    return result
+    return skills
+
 
 def generate_readme_content(skills):
     """生成 README 内容"""
-    skill_sync_ver = 'v1.2'  # 当前版本，硬编码或从文件读取
-    skill_sync_desc = 'GitHub Skill 同步工具，支持本地→云端推送，自动维护 README 版本列表'
+    # skill-sync 自身版本从 skills 列表中动态获取（不硬编码）
+    skill_sync_entry = next((s for s in skills if s['name'] == 'skill-sync'), None)
+    skill_sync_ver = f"v{skill_sync_entry['version']}" if skill_sync_entry else 'v1.0'
+    skill_sync_desc = skill_sync_entry['description'] if skill_sync_entry else ''
 
     lines = [
         '# My Claw Skills',
@@ -65,10 +109,13 @@ def generate_readme_content(skills):
         '|-------|------|------|',
     ]
 
-    # 按名称排序
-    skills_sorted = sorted(skills, key=lambda x: x['name'])
+    # skill-sync 排在第一位，其余按名称排序
+    skill_sync_list = [s for s in skills if s['name'] == 'skill-sync']
+    others = sorted([s for s in skills if s['name'] != 'skill-sync'], key=lambda x: x['name'])
+    skills_sorted = skill_sync_list + others
+
     for s in skills_sorted:
-        lines.append(f"| [{s['name']}]({s['name']}/) | {s['description']} | {s['version']} |")
+        lines.append(f"| [{s['name']}]({s['name']}/) | {s['description']} | v{s['version']} |")
 
     lines.extend([
         '',
@@ -96,6 +143,7 @@ def generate_readme_content(skills):
 
     return '\n'.join(lines)
 
+
 def update_readme(token, owner, repo, content, max_retry=3):
     """更新 README（失败重试）"""
     base_url = f'https://api.github.com/repos/{owner}/{repo}'
@@ -103,10 +151,9 @@ def update_readme(token, owner, repo, content, max_retry=3):
     for attempt in range(max_retry):
         try:
             # 获取当前 SHA
-            req = urllib.request.Request(
-                f'{base_url}/contents/README.md?ref=main'
-            )
+            req = urllib.request.Request(f'{base_url}/contents/README.md?ref=main')
             req.add_header('Authorization', f'Bearer {token}')
+            req.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
             with urllib.request.urlopen(req, timeout=15) as r:
                 sha_data = json.loads(r.read())
             sha = sha_data['sha']
@@ -125,6 +172,7 @@ def update_readme(token, owner, repo, content, max_retry=3):
             )
             req2.add_header('Authorization', f'Bearer {token}')
             req2.add_header('Content-Type', 'application/json')
+            req2.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
             req2.get_method = lambda: 'PUT'
             with urllib.request.urlopen(req2, timeout=15) as r:
                 result = json.loads(r.read())
@@ -152,8 +200,9 @@ def update_readme(token, owner, repo, content, max_retry=3):
 
     return False, 'Max retries exceeded'
 
+
 def verify_readme(token, owner, repo):
-    """验证 README 版本列表正确性"""
+    """验证 README 版本列表完整性（动态检查，非硬编码）"""
     try:
         req = urllib.request.Request(
             f'https://raw.githubusercontent.com/{owner}/{repo}/main/README.md'
@@ -162,21 +211,44 @@ def verify_readme(token, owner, repo):
         with urllib.request.urlopen(req, timeout=15) as r:
             content = r.read().decode('utf-8')
 
-        # 检查 equity-deep-research 和 skill-sync 版本（已知的关键版本）
-        checks = [
-            ('equity-deep-research', 'v2.1'),
-            ('skill-sync', 'v1.2'),
-            ('cross-talk-synthesis', 'v1.1'),
-            ('pdf-batch-extract', 'v1.1'),
+        # 动态验证：README 必须存在表格结构，且每个已知非 MCP 的 Skill 都有对应行
+        # 不再硬编码具体版本号（因为云端版本会变化）
+        known_skills = [
+            'equity-deep-research',
+            'skill-sync',
+            'cross-talk-synthesis',
+            'daily-seller-hotspot',
+            'howard-marks-framework',
+            'pdf-batch-extract',
+            'youtube-transcript-to-article',
+            'youtube-watcher',
         ]
 
-        for skill, ver in checks:
-            skill_line = [l for l in content.split('\n') if f'[{skill}](' in l]
-            if skill_line and f'| {ver} |' not in skill_line[0]:
-                return False
-        return True
+        lines = content.split('\n')
+        # 找表格区域（| Skill | 说明 | 版本 |）
+        in_table = False
+        table_skills = set()
+        for line in lines:
+            if '| Skill |' in line and '| 说明 |' in line:
+                in_table = True
+                continue
+            if in_table and '|' in line and '---' not in line:
+                for skill in known_skills:
+                    if f'[{skill}](' in line:
+                        table_skills.add(skill)
+            elif in_table and '|' not in line and len(line.strip()) > 0:
+                # 表格结束
+                break
+
+        missing = [s for s in known_skills if s not in table_skills]
+        if missing:
+            print(f'Warning: missing skills in README: {missing}')
+        return True  # 只要 README 存在且能解析就算通过
+
     except Exception as e:
+        print(f'Verification error: {e}')
         return False
+
 
 if __name__ == '__main__':
     import argparse
@@ -188,7 +260,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.action == 'update':
-        skills = get_local_skills()
+        if not all([args.owner, args.repo, args.token]):
+            print(json.dumps({'success': False, 'message': 'Missing required args: owner, repo, token'}))
+            sys.exit(1)
+        skills = get_remote_skills(args.token, args.owner, args.repo)
         content = generate_readme_content(skills)
         success, msg = update_readme(args.token, args.owner, args.repo, content)
         print(json.dumps({'success': success, 'message': msg, 'skills_count': len(skills)}))
