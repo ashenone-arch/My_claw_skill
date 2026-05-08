@@ -91,13 +91,32 @@ A：
 3. 若仍为空，在一致预期表格中标注"暂无机构覆盖"，段9 注明"建议补充卖方预测"
 4. 禁止自行估算 FY2/FY3 数字
 
-### Q6：用户要求覆盖港股/美股怎么办？
+### Q7：编排模式下段簇 sub-agent 修改了我的段级论点怎么办？
+A：
+1. Sub-agent 不可修改主 agent 在 Step 3 给定的段级论点（铁律）
+2. 若 sub-agent 输出中发现论点被修改，在 4c 阶段纠正
+3. 若 sub-agent 在正文中推翻了论点（基于数据发现），这是有价值的信号——主 agent 应在 4c 更新首席论点
+
+### Q8：用户要求覆盖港股/美股怎么办？
 A：本框架专为 A 股设计。
 1. 判断公司是否在 A 股上市（创业板/科创板/主板/北交所）
 2. 若为港股/美股，提示用户"本框架为 A 股设计，可改用 `ae:company-one-pager` 处理港美股"
 3. 港股可尝试用 iFinD 的港股数据（`search_stocks` 支持港股），但输出格式仍按 9 段结构
 
 ---
+
+## 编排模式速查（v2.4 更新）
+
+| 场景 | 行动 | Agent |
+|------|------|-------|
+| Step 2 并行取数（13条） | 同一条消息中全部并行发出 | mcporter call × 9 + search_finance_reports × 4 |
+| Step 3.5 MECE验证 | 主 agent 自检，三维度逐项打勾，输出验证报告 | 主 agent |
+| Step 3.5 第二轮（如 ❌ ≥ 3） | 修正后向用户确认修改方向，不阻塞则直接进入Step 4 | 主 agent |
+| Step 4b 段簇A（段1-4 基本面链） | task(make-report, mode="subtopic")，自读 template-cluster-A.md | make-report(subtopic) |
+| Step 4b 段簇B（段5-6 竞争力市场链） | task(make-report, mode="subtopic")，自读 template-cluster-B.md | make-report(subtopic) |
+| Step 4b 段簇C（段7 对标链） | task(make-report, mode="subtopic")，自读 template-cluster-C.md | make-report(subtopic) |
+| Step 4c 段8-9 + 引言 + 衔接 + 自检 | 主 agent 直接完成，读 template-main.md | 主 agent |
+| 快速通道（成熟蓝筹无争议） | task(make-report, stream_to_parent=true) 读5个模板文件一次写全 9 段 | make-report |
 
 ## 执行检查点
 
@@ -109,3 +128,5 @@ A：本框架专为 A 股设计。
 3. **可比公司不够**：段7 可比 < 3 家 → 见 Q3
 4. **研报内容不足**：摘要信息不够 → 调用 `get_document_detail`
 5. **数据时间存疑**：财报数据不是最新一期 → 标注数据截止时间
+6. **编排模式段簇写作失败**：sub-agent 返回空或报错 → 检查 prompt 中段级论点是否完整、数据文件路径是否正确
+7. **段间术语不统一**：簇A 用"营收"、簇C 用"收入" → 主 agent 在 4c 统一术语
