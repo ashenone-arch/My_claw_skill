@@ -1,3 +1,8 @@
+---
+version: "1.2"
+description: "GitHub Skill 同步工具，支持本地→云端推送，自动维护 README 版本列表"
+---
+
 # GitHub Skill 同步工具
 
 ## 概述
@@ -33,11 +38,13 @@
 读取 `github-config.json`，同时执行环境预检（决定推送路径）：
 
 **预检操作**：
+
 1. 检查 git 是否可用
 2. 测试 GitHub API 连通性
 3. 测试 git push 基础能力
 
 **路径选择**：
+
 - 全部通过 → **git clone 路径**（最快）
 - 任一失败 → 回退到 **GitHub API 路径**
 
@@ -50,6 +57,7 @@
 **本地列表**：扫描 `~/.alphaclaw/skills/` 下含 `SKILL.md` 的子目录，读取 frontmatter。
 
 **生成对比表**：
+
 ```
 | Skill | 说明 | 本地版本 | 远程版本 | 状态 |
 |-------|------|---------|---------|------|
@@ -64,6 +72,7 @@
 ### 第三步：询问同步方向
 
 向用户展示版本对比表。可用选项：
+
 - **"是，同步"** → 执行全部同步（拉取 + 推送）
 - **"具体指定哪些"** → 列出清单让用户勾选
 - **"否，跳过"** → 结束
@@ -73,6 +82,7 @@
 #### 4.1 拉取（远程 → 本地）
 
 对每个"新增"和"可更新" Skill：
+
 1. 在本地创建/更新目录
 2. 通过 GitHub API 获取文件列表（含 `references/` 子目录）
 3. 下载每个文件（base64 解码），写入本地路径
@@ -80,12 +90,14 @@
 #### 4.2 推送（本地 → 远程）
 
 对每个"可推送" Skill，使用 **scripts/push.py**：
+
 ```
 python "D:\AlphaEngine\resources\python\python\python.exe" scripts/push.py \
   --skill {skill-name} --owner {owner} --repo {repo} --token {token} --branch main
 ```
 
 **路径选择**：
+
 - git clone 路径（首选）：快，完整 git 操作
 - API 路径（备选）：无 git 依赖，仅 HTTP
 
@@ -96,12 +108,14 @@ python "D:\AlphaEngine\resources\python\python\python.exe" scripts/push.py \
 **时机**：任何同步导致版本变化后执行（推送成功后才执行）。
 
 执行 **scripts/readme_ops.py**：
+
 ```
 python "D:\AlphaEngine\resources\python\python\python.exe" scripts/readme_ops.py \
   --action update --owner {owner} --repo {repo} --token {token}
 ```
 
 **维护逻辑**：
+
 1. 扫描 `~/.alphaclaw/skills/` 下所有含 `SKILL.md` 的子目录
 2. 读取每个 Skill 的 frontmatter：`name`、`version`、`description`
 3. 生成本地 Skill 版本列表
@@ -114,6 +128,7 @@ python "D:\AlphaEngine\resources\python\python\python.exe" scripts/readme_ops.py
 ### 第五步：报告结果
 
 展示本次同步的变更：
+
 - 新增（远程 → 本地）：哪些 Skill
 - 更新（远程 → 本地）：哪些 Skill，版本变化
 - 推送（本地 → 远程）：哪些 Skill，版本变化
@@ -128,6 +143,7 @@ python "D:\AlphaEngine\resources\python\python\python.exe" scripts/readme_ops.py
 ## Token 更新提示
 
 Token 无效时：
+
 > 检测到 GitHub token 无效（已过期或被撤销）。请访问 https://github.com/settings/tokens 重新生成，然后将新 token 告诉我，我会更新配置文件。
 
 ## 快速参考

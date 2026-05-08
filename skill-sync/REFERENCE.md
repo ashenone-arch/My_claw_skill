@@ -76,9 +76,10 @@ path = 'git_clone' if precheck() else 'api_only'
 **缺点**：依赖 git 环境，需要配置 git user.email
 
 **执行流程**：
+
 ```bash
 # 1. 克隆到临时目录（浅克隆，--depth=1）
-git clone --depth=1 https://<token>@github.com/{owner}/{repo}.git /tmp/skill-sync-tmp
+git clone --depth=1 https://@github.com/{owner}/{repo}.git /tmp/skill-sync-tmp
 
 # 2. 进入目录
 cd /tmp/skill-sync-tmp
@@ -103,22 +104,15 @@ GIT_TERMINAL_PROMPT=0 git push origin main
 **缺点**：每个文件需要单独获取 SHA，批量操作繁琐
 
 **执行流程**：
+
 ```python
 # 1. 获取仓库根目录 SHA（创建 commit 用）
-GET /repos/{owner}/{repo}/git/ref/heads/main
-→ 拿到 commit SHA
+GET /repos/{owner}/{repo}/git/ref/heads/main → 拿到 commit SHA
 
 # 2. 对每个文件（SKILL.md + references/）：
-GET /repos/{owner}/{repo}/contents/{skill-name}/{file}?ref=main
-→ 拿到文件 SHA（如文件存在）
-
+GET /repos/{owner}/{repo}/contents/{skill-name}/{file}?ref=main → 拿到文件 SHA（如文件存在）
 PUT /repos/{owner}/{repo}/contents/{skill-name}/{file}
-Body: {
-  "message": "Update {skill-name} to v{x.y}",
-  "content": "<base64>",
-  "sha": "<file_sha>",
-  "branch": "main"
-}
+  Body: { "message": "Update {skill-name} to v{x.y}", "content": "", "sha": "", "branch": "main" }
 
 # 3. 完成后报告状态
 ```
@@ -174,6 +168,7 @@ def update_readme(token, owner, repo, content, max_retry=3):
             # 验证
             if 'content' in result:
                 return verify_readme(token, owner, repo)
+
         except Exception as e:
             print(f'Attempt {attempt+1} failed: {e}')
             time.sleep(2)
@@ -257,12 +252,14 @@ def verify_readme(token, owner, repo):
 ```python
 def push_with_verification(repo_path, commit_msg):
     import subprocess, os
+
     env = {**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
 
     # 第一次推送
     r = subprocess.run(
         ['git', 'push', 'origin', 'main'],
-        capture_output=True, text=True, timeout=60, cwd=repo_path, env=env
+        capture_output=True, text=True, timeout=60,
+        cwd=repo_path, env=env
     )
 
     # 检查输出
@@ -272,9 +269,9 @@ def push_with_verification(repo_path, commit_msg):
     # 失败则重试一次
     r = subprocess.run(
         ['git', 'push', 'origin', 'main'],
-        capture_output=True, text=True, timeout=60, cwd=repo_path, env=env
+        capture_output=True, text=True, timeout=60,
+        cwd=repo_path, env=env
     )
-
     if 'main -> main' in r.stdout or r.returncode == 0:
         return True
 
@@ -298,18 +295,14 @@ def push_with_verification(repo_path, commit_msg):
 def compare_versions(v1, v2):
     """比较两个版本号，返回 1(v1>v2), 0(相等), -1(v1<v2)"""
     def parse(v):
-        # 去掉 'v' 前缀
-        v = v.lstrip('v')
-        parts = v.split('.')
-        return [int(p) for p in parts]
-
-    p1, p2 = parse(v1), parse(v2)
-    for i in range(max(len(p1), len(p2))):
-        n1 = p1[i] if i < len(p1) else 0
-        n2 = p2[i] if i < len(p2) else 0
-        if n1 > n2:
+        return [int(x) for x in v.lstrip('v').split('.')]
+    n1, n2 = parse(v1), parse(v2)
+    for i in range(max(len(n1), len(n2))):
+        i1 = n1[i] if i < len(n1) else 0
+        i2 = n2[i] if i < len(n2) else 0
+        if i1 > i2:
             return 1
-        elif n1 < n2:
+        elif i1 < i2:
             return -1
     return 0
 ```

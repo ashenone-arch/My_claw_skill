@@ -1,5 +1,5 @@
-"""
-readme_ops.py - README 自动维护脚本
+""" readme_ops.py - README 自动维护脚本
+
 功能：生成当前本地所有 Skill 的版本列表，更新到 GitHub README
 验证：更新后检查版本列表是否正确（失败重试最多 3 次）
 """
@@ -14,8 +14,7 @@ def get_local_skills():
         skill_path = os.path.join(skills_dir, name, 'SKILL.md')
         if not os.path.isfile(skill_path):
             continue
-        if name.startswith('mcp--') or name in ['skill-sync']:
-            # skill-sync 自己跳过（后面单独处理）
+        if name.startswith('mcp--') or name in ['skill-sync']:  # skill-sync 自己跳过（后面单独处理）
             if name == 'skill-sync':
                 pass  # 仍收录
             else:
@@ -24,11 +23,9 @@ def get_local_skills():
         try:
             with open(skill_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-
             version = 'unknown'
             description = ''
             in_frontmatter = False
-
             for line in content.split('\n'):
                 if line.strip() == '---':
                     if not in_frontmatter:
@@ -41,7 +38,6 @@ def get_local_skills():
                     elif line.startswith('description:'):
                         desc = line.split(':', 1)[1].strip()
                         description = desc[:50] + ('...' if len(desc) > 50 else '')
-
             result.append({
                 'name': name,
                 'version': version,
@@ -71,7 +67,6 @@ def generate_readme_content(skills):
 
     # 按名称排序
     skills_sorted = sorted(skills, key=lambda x: x['name'])
-
     for s in skills_sorted:
         lines.append(f"| [{s['name']}]({s['name']}/) | {s['description']} | {s['version']} |")
 
@@ -125,7 +120,8 @@ def update_readme(token, owner, repo, content, max_retry=3):
                 'branch': 'main'
             }).encode('utf-8')
             req2 = urllib.request.Request(
-                f'{base_url}/contents/README.md', data=data
+                f'{base_url}/contents/README.md',
+                data=data
             )
             req2.add_header('Authorization', f'Bearer {token}')
             req2.add_header('Content-Type', 'application/json')
@@ -145,7 +141,7 @@ def update_readme(token, owner, repo, content, max_retry=3):
                     else:
                         return False, 'Update succeeded but verification failed'
             else:
-                return False, f'Update failed: {result.get("message", "unknown")}'
+                return False, f"Update failed: {result.get('message', 'unknown')}"
 
         except Exception as e:
             if attempt < max_retry - 1:
@@ -173,6 +169,7 @@ def verify_readme(token, owner, repo):
             ('cross-talk-synthesis', 'v1.1'),
             ('pdf-batch-extract', 'v1.1'),
         ]
+
         for skill, ver in checks:
             skill_line = [l for l in content.split('\n') if f'[{skill}](' in l]
             if skill_line and f'| {ver} |' not in skill_line[0]:

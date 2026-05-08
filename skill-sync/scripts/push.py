@@ -1,7 +1,4 @@
-"""
-push.py - 推送 Skill 到 GitHub
-支持 git clone 路径（首选）和 GitHub API 路径（备选）
-"""
+""" push.py - 推送 Skill 到 GitHub 支持 git clone 路径（首选）和 GitHub API 路径（备选） """
 import sys, os, json, base64, time, subprocess, urllib.request
 
 def precheck_git():
@@ -62,7 +59,9 @@ def push_git_clone(skill_name, owner, repo, token, branch='main'):
         r = subprocess.run(
             ['git', 'commit', '-m', commit_msg],
             cwd=tmp, capture_output=True, text=True,
-            env={**os.environ, 'GIT_TERMINAL_PROMPT': '0', 'GIT_AUTHOR_NAME': 'AlphaClaw', 'GIT_AUTHOR_EMAIL': 'agent@alphaclaw'}
+            env={**os.environ, 'GIT_TERMINAL_PROMPT': '0',
+                 'GIT_AUTHOR_NAME': 'AlphaClaw',
+                 'GIT_AUTHOR_EMAIL': 'agent@alphaclaw'}
         )
         if r.returncode != 0 and 'nothing to commit' not in r.stdout:
             return False, f'Commit failed: {r.stdout} {r.stderr}'
@@ -73,7 +72,6 @@ def push_git_clone(skill_name, owner, repo, token, branch='main'):
             cwd=tmp, capture_output=True, text=True, timeout=60,
             env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
         )
-
         if 'main -> main' in r.stdout or r.returncode == 0:
             return True, 'Push successful'
         else:
@@ -86,6 +84,7 @@ def push_git_clone(skill_name, owner, repo, token, branch='main'):
             if 'main -> main' in r.stdout or r.returncode == 0:
                 return True, 'Push successful (retry)'
             return False, f'Push failed after retry: {r.stdout} {r.stderr}'
+
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -103,8 +102,8 @@ def get_local_version(skill_name):
 def push_api(skill_name, owner, repo, token, branch='main'):
     """GitHub API 路径推送"""
     base_url = f'https://api.github.com/repos/{owner}/{repo}'
-    skill_src = os.path.expanduser(f'~/.alphaclaw/skills/{skill_name}')
 
+    skill_src = os.path.expanduser(f'~/.alphaclaw/skills/{skill_name}')
     if not os.path.exists(skill_src):
         return False, f'Skill source not found: {skill_src}'
 
