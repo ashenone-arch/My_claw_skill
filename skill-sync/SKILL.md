@@ -33,41 +33,19 @@ description: "GitHub Skill 同步工具，支持本地↔云端双向同步；RE
 
 ## 执行步骤
 
+完整执行细节 → 见 `references/sync-workflow.md`
+
 ### 第一步：读取配置 + 环境预检
 
-读取 `github-config.json`，同时执行环境预检（决定推送路径）：
+读取 `github-config.json`，执行预检（git 可用性、API 连通性、git push 能力），决定使用 git clone 路径或 API 路径。预检完成后向用户说明当前使用的路径。
 
-**预检操作**：
-
-1. 检查 git 是否可用
-2. 测试 GitHub API 连通性
-3. 测试 git push 基础能力
-
-**路径选择**：
-
-- 全部通过 → **git clone 路径**（最快）
-- 任一失败 → 回退到 **GitHub API 路径**
-
-> 预检完成后，向用户说明当前使用的路径。
+> 预检规则详细说明 → `references/troubleshooting.md` 第一节
 
 ### 第二步：获取远程与本地版本对比
 
-**远程列表**：调用 `GET /repos/{owner}/{repo}/contents`（分支=main），筛选目录类型，读取 frontmatter `version` 和 `description`。
+调用 GitHub API 获取远程 Skill 列表，扫描本地 `~/.alphaclaw/skills/` 获取本地版本，生成对比表。
 
-**本地列表**：扫描 `~/.alphaclaw/skills/` 下含 `SKILL.md` 的子目录，读取 frontmatter。
-
-**生成对比表**：
-
-```
-| Skill | 说明 | 本地版本 | 远程版本 | 状态 |
-|-------|------|---------|---------|------|
-| xxx | 描述... | v1.0 | v1.0 | 已同步 |
-| yyy | 描述... | v0.9 | v1.0 | 可更新（远程 > 本地）|
-| zzz | 描述... | v1.2 | v1.0 | 可推送（本地 > 远程）|
-| www | 描述... | - | v1.0 | 新增 |
-```
-
-**版本比较**：使用语义化版本比较（v1.0 < v1.1 < v2.0），纯字符串比较无效。
+> 版本比较逻辑（含语义化版本比较）→ `references/version-compare.md`
 
 ### 第三步：询问同步方向
 
@@ -81,11 +59,7 @@ description: "GitHub Skill 同步工具，支持本地↔云端双向同步；RE
 
 #### 4.1 拉取（远程 → 本地）
 
-对每个"新增"和"可更新" Skill：
-
-1. 在本地创建/更新目录
-2. 通过 GitHub API 获取文件列表（含 `references/` 子目录）
-3. 下载每个文件（base64 解码），写入本地路径
+对每个"新增"和"可更新" Skill，通过 GitHub API 下载所有文件（含 `references/` 子目录）到本地。
 
 #### 4.2 推送（本地 → 远程）
 
@@ -96,55 +70,34 @@ python "D:\AlphaEngine\resources\python\python\python.exe" scripts/push.py \
   --skill {skill-name} --owner {owner} --repo {repo} --token {token} --branch main
 ```
 
-**路径选择**：
+推送后自动验证，验证失败重试（最多 1 次）。
 
-- git clone 路径（首选）：快，完整 git 操作
-- API 路径（备选）：无 git 依赖，仅 HTTP
-
-> 推送后自动验证，验证失败重试（最多 1 次），仍失败则记录到结果报告。
+> 推送路径详解（git clone vs API）→ `references/troubleshooting.md` 第二节
 
 #### 4.3 README 自动维护
 
-**时机**：任何同步导致版本变化后执行（推送成功后才执行）。
-
-执行 **scripts/readme_ops.py**：
+推送成功后才执行。使用 **scripts/readme_ops.py**：
 
 ```
 python "D:\AlphaEngine\resources\python\python\python.exe" scripts/readme_ops.py \
   --action update --owner {owner} --repo {repo} --token {token}
 ```
 
-**维护逻辑（以云端为基准）**：
-
-1. 调用 GitHub API `GET /repos/{owner}/{repo}/contents` 获取远程 Skill 目录列表
-2. 遍历每个目录，获取 `SKILL.md` 内容（base64 解码），解析 frontmatter `name`、`version`、`description`
-3. **skill-sync 自身版本**：从 GitHub API 获取 `skill-sync/SKILL.md` 的 version 字段（不写死在代码中）
-4. 生成 README 内容（以远程版本为准）
-5. 调用 API 获取 README SHA，更新 README（base64 编码）
-6. **验证**：GET README 确认版本列表正确（失败重试最多 3 次）
-
-> README 版本列表始终以云端 Skill 为基准，确保与仓库实际内容一致。验证成功才算完成，未验证视为失败。
+> README 维护逻辑详解 → `references/readme-logic.md`
 
 ### 第五步：报告结果
 
-展示本次同步的变更：
-
-- 新增（远程 → 本地）：哪些 Skill
-- 更新（远程 → 本地）：哪些 Skill，版本变化
-- 推送（本地 → 远程）：哪些 Skill，版本变化
-- README 更新状态
-- 失败项及原因 + 重试建议
-
-## 配置保存规则
-
-用户提供 GitHub 信息后自动保存到 `github-config.json`，无需每次询问。
-新仓库地址/token → 询问是否覆盖（"确认用新的替换？"）。
+展示本次同步的变更：新增、更新、推送列表，README 状态，失败项及原因。
 
 ## Token 更新提示
 
 Token 无效时：
 
 > 检测到 GitHub token 无效（已过期或被撤销）。请访问 https://github.com/settings/tokens 重新生成，然后将新 token 告诉我，我会更新配置文件。
+
+## 配置保存规则
+
+用户提供 GitHub 信息后自动保存到 `github-config.json`，无需每次询问。新仓库地址/token → 询问是否覆盖（"确认用新的替换？"）。
 
 ## 快速参考
 
@@ -158,4 +111,9 @@ Token 无效时：
 
 ## 进阶参考
 
-> 高级用法、故障排查、API 路径详细说明 → 见 `REFERENCE.md`
+| 文件 | 内容 |
+|------|------|
+| `references/sync-workflow.md` | 完整执行步骤详解（第一步~第五步）|
+| `references/version-compare.md` | 版本对比表模板 + 语义化版本比较逻辑 |
+| `references/readme-logic.md` | README 维护逻辑 + 执行命令 |
+| `references/troubleshooting.md` | 预检规则 + 推送路径对比 + 故障排查表 |
