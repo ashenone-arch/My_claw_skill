@@ -6,15 +6,15 @@
 
 | Skill | 说明 | 版本 |
 |-------|------|------|
-| [cross-talk-synthesis](cross-talk-synthesis/) | 当用户需要将多篇已有的对谈文章（不同嘉宾、不同时间但围绕同一主题）汇总为一篇以话题为轴心的交叉分析文... | 2.0 |
-| [daily-seller-hotspot](daily-seller-hotspot/) | 当用户需要了解当日卖方/机构关注的热点方向、生成卖方热点选股报告时使用。触发场景包括："今天卖方抱团... | 1.0 |
-| [equity-deep-research](equity-deep-research/) | 当用户需要对A股上市公司进行深度研究、分析公司基本面、撰写投研素材时使用。触发场景包括："深度研究 ... | 2.1 |
-| [howard-marks-framework](howard-marks-framework/) | 当用户想要用霍华德·马克斯（Howard Marks）的投资框架来评估某个投资标的（股票、债券、基金... | 1.0 |
-| [iFinD-Finance-Data](iFinD-Finance-Data/) | "同花顺金融数据查询，查询股票、基金、宏观经济、行业经济及新闻公告数据，同时支持智能选股、选基、宏观... | 1.0.0 |
-| [pdf-batch-extract](pdf-batch-extract/) | 当用户需要将文件夹内多个 PDF 统一提取原文和表格为 MD 文件时使用。即使用户说"批量提取 PD... | 1.1 |
-| [skill-sync](skill-sync/) | "GitHub Skill 同步工具，支持本地→云端推送，自动维护 README 版本列表" | "1.2" |
-| [youtube-transcript-to-article](youtube-transcript-to-article/) | 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成... | 1.0 |
-| [youtube-watcher](youtube-watcher/) | Fetch and read transcripts from YouTube videos. Us... | 1.0.0 |
+| [cross-talk-synthesis](cross-talk-synthesis/) | 当用户需要将多篇已有的对谈文章汇总为以话题为轴心的交叉分析文章时触发。 | v2.0 |
+| [daily-seller-hotspot](daily-seller-hotspot/) | 当用户需要了解当日卖方/机构关注的热点方向、生成卖方热点选股报告时使用。 | v1.0 |
+| [equity-deep-research](equity-deep-research/) | 当用户需要对A股上市公司进行深度研究、分析公司基本面、撰写投研素材时使用。 | v2.1 |
+| [howard-marks-framework](howard-marks-framework/) | 当用户想要用霍华德·马克斯的投资框架来评估某个投资标的时使用。 | v1.0 |
+| [iFinD-Finance-Data](iFinD-Finance-Data/) | 同花顺金融数据查询，查询股票、基金、宏观经济、行业经济及新闻公告数据。 | v1.0.0 |
+| [pdf-batch-extract](pdf-batch-extract/) | 当用户需要将文件夹内多个 PDF 统一提取原文和表格为 MD 文件时使用。 | v1.1 |
+| [skill-sync](skill-sync/) | GitHub Skill 同步工具，支持本地→云端推送，自动维护 README 版本列表。 | v1.2 |
+| [youtube-transcript-to-article](youtube-transcript-to-article/) | 当用户提供 YouTube 视频链接并要求生成书面总结文章时触发。 | v1.0 |
+| [youtube-watcher](youtube-watcher/) | Fetch and read transcripts from YouTube videos. | v1.0.0 |
 
 ## 使用方式
 
