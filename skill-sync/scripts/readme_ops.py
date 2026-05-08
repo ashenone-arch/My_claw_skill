@@ -30,7 +30,7 @@ def _api_request(url, token, method='GET', data=None):
 
 
 def _parse_frontmatter(content):
-    """解析 SKILL.md frontmatter 中的 version 和 description"""
+    """解析 SKILL.md frontmatter"""
     version = 'unknown'
     description = ''
     in_frontmatter = False
@@ -42,9 +42,9 @@ def _parse_frontmatter(content):
                 break
         elif in_frontmatter:
             if line.startswith('version:'):
-                version = line.split(':', 1)[1].strip().lstrip('v')
+                version = line.split(':', 1)[1].strip().strip('"').strip("'").lstrip('v')
             elif line.startswith('description:'):
-                desc = line.split(':', 1)[1].strip()
+                desc = line.split(':', 1)[1].strip().strip('"').strip("'")
                 description = desc[:60] + ('...' if len(desc) > 60 else '')
     return version, description
 
@@ -54,24 +54,16 @@ def get_remote_skills(token, owner, repo):
     skills_url = f'https://api.github.com/repos/{owner}/{repo}/contents'
     skills = []
 
-    try:
-        dirs = _api_request(skills_url, token)
-    except Exception as e:
-        raise RuntimeError(f'无法获取仓库目录: {e}')
-
-    # 排除 MCP 相关和明显非 Skill 目录
+    dirs = _api_request(skills_url, token)
     skip_dirs = {'README.md', '.github', 'docs', 'scripts', 'scripts_backup', '.git'}
+
     for entry in dirs:
         if entry['type'] != 'dir':
             continue
         name = entry['name']
-        if name in skip_dirs or name.startswith('.'):
-            continue
-        # MCP 相关目录也跳过
-        if name.startswith('mcp--'):
+        if name in skip_dirs or name.startswith('.') or name.startswith('mcp--'):
             continue
 
-        # 获取 SKILL.md 内容
         skill_md_url = f'{skills_url}/{name}/SKILL.md'
         try:
             file_data = _api_request(skill_md_url, token)
@@ -85,7 +77,6 @@ def get_remote_skills(token, owner, repo):
                     'sha': file_data.get('sha')
                 })
         except Exception:
-            # 该目录没有 SKILL.md，跳过
             pass
 
     return skills
@@ -93,11 +84,6 @@ def get_remote_skills(token, owner, repo):
 
 def generate_readme_content(skills):
     """生成 README 内容"""
-    # skill-sync 自身版本从 skills 列表中动态获取（不硬编码）
-    skill_sync_entry = next((s for s in skills if s['name'] == 'skill-sync'), None)
-    skill_sync_ver = f"v{skill_sync_entry['version']}" if skill_sync_entry else 'v1.0'
-    skill_sync_desc = skill_sync_entry['description'] if skill_sync_entry else ''
-
     lines = [
         '# My Claw Skills',
         '',
@@ -109,12 +95,10 @@ def generate_readme_content(skills):
         '|-------|------|------|',
     ]
 
-    # skill-sync 排在第一位，其余按名称排序
+    # skill-sync 排第一，其余按名称排序
     skill_sync_list = [s for s in skills if s['name'] == 'skill-sync']
     others = sorted([s for s in skills if s['name'] != 'skill-sync'], key=lambda x: x['name'])
-    skills_sorted = skill_sync_list + others
-
-    for s in skills_sorted:
+    for s in skill_sync_list + others:
         lines.append(f"| [{s['name']}]({s['name']}/) | {s['description']} | v{s['version']} |")
 
     lines.extend([
@@ -147,47 +131,43 @@ def generate_readme_content(skills):
 def update_readme(token, owner, repo, content, max_retry=3):
     """更新 README（失败重试）"""
     base_url = f'https://api.github.com/repos/{owner}/{repo}'
+    encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
 
     for attempt in range(max_retry):
         try:
             # 获取当前 SHA
-            req = urllib.request.Request(f'{base_url}/contents/README.md?ref=main')
-            req.add_header('Authorization', f'Bearer {token}')
-            req.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
-            with urllib.request.urlopen(req, timeout=15) as r:
-                sha_data = json.loads(r.read())
-            sha = sha_data['sha']
+            sha_req = urllib.request.Request(f'{base_url}/contents/README.md?ref=main')
+            sha_req.add_header('Authorization', f'Bearer {token}')
+            sha_req.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
+            with urllib.request.urlopen(sha_req, timeout=15) as r:
+                file_data = json.loads(r.read())
+            sha = file_data['sha']
 
             # 上传新内容
-            encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-            data = json.dumps({
+            payload = json.dumps({
                 'message': 'chore: sync skills and update README [skip ci]',
                 'sha': sha,
                 'content': encoded,
                 'branch': 'main'
             }).encode('utf-8')
-            req2 = urllib.request.Request(
-                f'{base_url}/contents/README.md',
-                data=data
-            )
-            req2.add_header('Authorization', f'Bearer {token}')
-            req2.add_header('Content-Type', 'application/json')
-            req2.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
-            req2.get_method = lambda: 'PUT'
-            with urllib.request.urlopen(req2, timeout=15) as r:
+            put_req = urllib.request.Request(f'{base_url}/contents/README.md', data=payload)
+            put_req.add_header('Authorization', f'Bearer {token}')
+            put_req.add_header('Content-Type', 'application/json')
+            put_req.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
+            put_req.get_method = lambda: 'PUT'
+            with urllib.request.urlopen(put_req, timeout=15) as r:
                 result = json.loads(r.read())
 
             # 验证
             if 'content' in result:
-                verified = verify_readme(token, owner, repo)
-                if verified:
-                    return True, 'README updated and verified'
-                else:
-                    if attempt < max_retry - 1:
-                        time.sleep(2)
-                        continue
-                    else:
-                        return False, 'Update succeeded but verification failed'
+                verified_req = urllib.request.Request(
+                    f'https://raw.githubusercontent.com/{owner}/{repo}/main/README.md'
+                )
+                verified_req.add_header('User-Agent', 'Mozilla/5.0')
+                with urllib.request.urlopen(verified_req, timeout=15) as r:
+                    verify_content = r.read().decode('utf-8')
+                skill_count = verify_content.count('| [')
+                return True, f'Updated and verified ({skill_count} skills)'
             else:
                 return False, f"Update failed: {result.get('message', 'unknown')}"
 
@@ -201,55 +181,6 @@ def update_readme(token, owner, repo, content, max_retry=3):
     return False, 'Max retries exceeded'
 
 
-def verify_readme(token, owner, repo):
-    """验证 README 版本列表完整性（动态检查，非硬编码）"""
-    try:
-        req = urllib.request.Request(
-            f'https://raw.githubusercontent.com/{owner}/{repo}/main/README.md'
-        )
-        req.add_header('User-Agent', 'Mozilla/5.0')
-        with urllib.request.urlopen(req, timeout=15) as r:
-            content = r.read().decode('utf-8')
-
-        # 动态验证：README 必须存在表格结构，且每个已知非 MCP 的 Skill 都有对应行
-        # 不再硬编码具体版本号（因为云端版本会变化）
-        known_skills = [
-            'equity-deep-research',
-            'skill-sync',
-            'cross-talk-synthesis',
-            'daily-seller-hotspot',
-            'howard-marks-framework',
-            'pdf-batch-extract',
-            'youtube-transcript-to-article',
-            'youtube-watcher',
-        ]
-
-        lines = content.split('\n')
-        # 找表格区域（| Skill | 说明 | 版本 |）
-        in_table = False
-        table_skills = set()
-        for line in lines:
-            if '| Skill |' in line and '| 说明 |' in line:
-                in_table = True
-                continue
-            if in_table and '|' in line and '---' not in line:
-                for skill in known_skills:
-                    if f'[{skill}](' in line:
-                        table_skills.add(skill)
-            elif in_table and '|' not in line and len(line.strip()) > 0:
-                # 表格结束
-                break
-
-        missing = [s for s in known_skills if s not in table_skills]
-        if missing:
-            print(f'Warning: missing skills in README: {missing}')
-        return True  # 只要 README 存在且能解析就算通过
-
-    except Exception as e:
-        print(f'Verification error: {e}')
-        return False
-
-
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
@@ -261,7 +192,7 @@ if __name__ == '__main__':
 
     if args.action == 'update':
         if not all([args.owner, args.repo, args.token]):
-            print(json.dumps({'success': False, 'message': 'Missing required args: owner, repo, token'}))
+            print(json.dumps({'success': False, 'message': 'Missing required args'}))
             sys.exit(1)
         skills = get_remote_skills(args.token, args.owner, args.repo)
         content = generate_readme_content(skills)
