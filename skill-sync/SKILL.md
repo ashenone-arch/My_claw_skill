@@ -1,5 +1,5 @@
 ---
-version: "1.3"
+version: "1.4"
 description: "GitHub Skill 同步工具，支持本地↔云端双向同步；README 版本列表以云端 Skill 为基准生成。"
 ---
 
