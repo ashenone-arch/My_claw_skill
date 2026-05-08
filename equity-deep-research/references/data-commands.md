@@ -12,10 +12,28 @@
 
 使用 `mcporter call` 工具直接调用 iFinD MCP 接口。参数为 JSON 对象，无 bash 转义风险。
 
-> ⚠️ **关键格式规则**：`tool` 参数必须是 `"服务器.工具"` 格式（点号连接为**单个字符串**），禁止拆分为 `server` + `tool` 两个参数。
+> ⚠️ **关键格式规则**：`tool` 参数必须是 `"服务器.工具"` 格式（点号连接为**单个字符串**），且必须嵌套在 `args` **内部**，由 `args` 透传给 MCP 服务器。
 >
-> ✅ 正确：`tool="hexin-ifind-ds-stock-mcp.get_stock_financials"`
-> ❌ 错误：`server="hexin-ifind-ds-stock-mcp" tool="get_stock_financials"` → 报 "tool 格式错误，应为 server.tool"
+> ✅ 正确结构：
+> ```json
+> mcporter call
+>   command: "call"
+>   tool: "hexin-ifind-ds-stock-mcp.get_stock_financials"
+>   args: { "query": "<查询内容>" }
+> ```
+>
+> ❌ 错误A：`server="hexin-ifind-ds-stock-mcp" tool="get_stock_financials"` → 报 "tool 格式错误"
+>
+> ❌ 错误B（最高频！）：
+> ```json
+> mcporter call
+>   command: "call"
+>   args: { "query": "<查询内容>" }
+>   tool: null       // ← tool 放在 args 同级（top-level），服务器收不到
+> ```
+> → 报错：**"缺少必需参数: tool"**，且常成批失败（所有调用同时报错）
+>
+> ⚠️ **并行调用防错检查**：大规模并行发出多个 mcporter call 前，先写一个调用确认结构正确，再扩展到全部。特征：若所有 mcporter call **同时**报"缺少必需参数: tool"，几乎可以确定是 `tool` 放错层级。
 
 **备选：bash + call.py**
 

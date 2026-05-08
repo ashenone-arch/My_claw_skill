@@ -22,10 +22,40 @@
 
 | 症状 | 可能原因 | 处理方案 |
 |------|---------|---------|
+| mcporter call 报 **"缺少必需参数: tool"** | `tool` 参数未正确传入 MCP 服务器 | 这是**最高频、最隐蔽**的失败模式。根因：`tool` 字段出现在了 `args` 的同级（top-level），而非嵌套在 `args` 对象内部传递给 MCP 服务器。见下方**结构规范** |
 | mcporter call 报 "tool 格式错误，应为 server.tool" | 将 server 和 tool 拆成了两个参数 | 合并为一个参数：`tool="hexin-ifind-ds-stock-mcp.方法名"`（点号连接，单字符串） |
 | 工具调用报错 | 方法名/参数名拼写错误 | 用 `mcporter list` 查看 iFinD MCP 服务器的完整工具列表和参数 |
 | 工具未找到 | 服务器未启用或配置错误 | 用 `mcporter list` 检查 iFinD MCP 服务器状态 |
 | bash 命令格式错误 | JSON 转义问题（单引号内嵌双引号等） | 改用 mcporter call 避免 bash 转义；或检查 `call.py` 参数中 JSON 是否正确转义 |
+
+### ⚠️ mcporter call 参数结构规范（最高优先级）
+
+**`tool` 必须嵌套在 `args` 内部**，作为 MCP 服务器方法名的载体。以下两种写法在 JSON 结构上完全不同：
+
+```json
+// ✅ 正确写法：tool 在 args 内部，作为透传给 MCP 服务器的字段
+mcporter call
+  command: "call"
+  tool: "hexin-ifind-ds-stock-mcp.get_stock_summary"
+  args: {
+    query: "寒武纪 688256.SH 公司介绍 主营业务"
+  }
+
+// ❌ 错误写法：tool 出现在 args 同级（top-level），args 透传给服务器时无 tool 字段
+mcporter call
+  command: "call"
+  args: {
+    query: "寒武纪 688256.SH 公司介绍 主营业务"
+  }
+  tool: null        // ← 错误位置！服务器收不到 tool
+```
+
+**批量并行调用时的检查流程**：
+1. 每次发出批量调用前，**先验证单个调用的结构模板**
+2. 批量发出后若全部失败，第一时间检查是否所有调用的 `tool` 都嵌套在 `args` 同级（top-level），而非 `args` 内部
+3. 并行调用数量越多越容易出现此错误——建议批量前先写一个模板确认无误再扩展
+
+**失败特征识别**：若并行调用时**所有 mcporter call 同时报错"缺少必需参数: tool"**，而非只有部分失败，则几乎可以确定是 `tool` 放错层级。修复后重新发出即可。
 
 ---
 
