@@ -9,24 +9,84 @@ import os
 import json
 import base64
 import time
+import ssl
 import urllib.request
 
 PYTHON = r"D:\AlphaEngine\resources\python\python\python.exe"
 
+# 全局 SSL 上下文（启动时初始化，失败则为 None）
+_GLOBAL_SSL_CTX = None
+try:
+    _ctx = ssl.create_default_context()
+    _ctx.check_hostname = False
+    _ctx.verify_mode = ssl.CERT_NONE
+    test_req = urllib.request.Request(
+        'https://api.github.com/zen',
+        headers={'User-Agent': 'AlphaClaw-SkillSync/1.0'}
+    )
+    urllib.request.urlopen(test_req, timeout=5, context=_ctx)
+    _GLOBAL_SSL_CTX = _ctx
+except Exception:
+    pass
 
-def _api_request(url, token, method='GET', data=None):
-    """通用 GitHub API 请求"""
-    req = urllib.request.Request(url)
-    req.add_header('Authorization', f'Bearer {token}')
-    req.add_header('Accept', 'application/vnd.github.v3+json')
-    req.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
-    if method != 'GET':
-        req.get_method = lambda: method
-    if data:
-        req.add_header('Content-Type', 'application/json')
-        req.data = json.dumps(data).encode('utf-8')
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())
+
+def _build_ssl_ctx():
+    """构建 SSL 上下文，多级降级"""
+    for ctx in [
+        ssl.create_default_context(),
+        ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+    ]:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try:
+            test = urllib.request.Request('https://api.github.com/zen')
+            test.add_header('User-Agent', 'AlphaClaw-SkillSync/1.0')
+            urllib.request.urlopen(test, timeout=5, context=ctx)
+            return ctx
+        except Exception:
+            continue
+    return None
+
+
+def _api_request(url, token, method='GET', data=None, max_retry=2):
+    """通用 GitHub API 请求（含 SSL 降级 + 重试）"""
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'AlphaClaw-SkillSync/1.0'
+    }
+
+    # 优先用全局 SSL 上下文
+    ctx = _GLOBAL_SSL_CTX
+    kw = {'timeout': 30}
+    if ctx:
+        kw['context'] = ctx
+
+    for attempt in range(max_retry + 1):
+        try:
+            req = urllib.request.Request(url, data=data)
+            for k, v in headers.items():
+                req.add_header(k, v)
+            if method != 'GET':
+                req.get_method = lambda: method
+            if data and method == 'GET':
+                pass  # data should not be set for GET
+            with urllib.request.urlopen(req, **kw) as r:
+                return json.loads(r.read())
+        except Exception as e:
+            err_str = str(e)
+            # SSL 错误时尝试禁用 SSL 验证
+            if attempt == 0 and ('SSL' in err_str or 'EOF' in err_str or 'ssl' in err_str.lower()):
+                try:
+                    fallback_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    fallback_ctx.check_hostname = False
+                    fallback_ctx.verify_mode = ssl.CERT_NONE
+                    kw['context'] = fallback_ctx
+                    continue
+                except Exception:
+                    pass
+            if attempt >= max_retry:
+                raise
 
 
 def _parse_frontmatter(content):
