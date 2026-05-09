@@ -12,7 +12,7 @@
 | [equity-deep-research](equity-deep-research/) | 当用户需要对A股上市公司进行深度研究、分析公司基本面、撰写投研素材时使用。触发场景包括："深度研究 XX公司"、"分析一... | v2.6 |
 | [howard-marks-framework](howard-marks-framework/) | 当用户想要用霍华德·马克斯（Howard Marks）的投资框架来评估某个投资标的（股票、债券、基金、行业等）或审查投资... | v1.0 |
 | [pdf-batch-extract](pdf-batch-extract/) | 当用户需要将文件夹内多个 PDF 统一提取原文和表格为 MD 文件时使用。即使用户说"批量提取 PDF"、"把 PDF ... | v1.1 |
-| [youtube-transcript-to-article](youtube-transcript-to-article/) | 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成完整书面文章并保存为... | v1.0 |
+| [youtube-transcript-to-article](youtube-transcript-to-article/) | 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成完整书面文章并保存为... | v2.0 |
 
 ## 使用方式
 
