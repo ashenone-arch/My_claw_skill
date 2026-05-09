@@ -1,6 +1,7 @@
 # 段1-4 模板 · 基本面链
 > 本文件为 Sub-agent A 专用写作模板。
 > 执行前：先读 `template-datasource.md`，再按以下模板写段1-段4。
+> ⚠️ 格式铁律：禁止生成图片/图表/可视化，全文仅用 markdown 文字/表格/嵌套列表，主体内容 bullet point 驱动。
 
 ---
 
