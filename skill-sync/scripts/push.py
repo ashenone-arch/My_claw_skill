@@ -94,7 +94,9 @@ def get_local_version(skill_name):
         with open(skill_file, 'r', encoding='utf-8') as f:
             for line in f:
                 if line.startswith('version:'):
-                    return line.split(':')[1].strip().lstrip('v')
+                    raw = line.split(':', 1)[1].strip()
+                    # 去除首尾引号（支持 version: "1.4" 或 version: 1.4）
+                    return raw.strip('"').strip("'").lstrip('v')
     except:
         pass
     return 'unknown'

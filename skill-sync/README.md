@@ -1,6 +1,6 @@
 # skill-sync
 
-> GitHub Skill 同步工具 | 版本: v1.0
+> GitHub Skill 同步工具 | 版本: v1.5
 
 ## 概述
 
