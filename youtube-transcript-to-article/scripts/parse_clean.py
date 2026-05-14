@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""YouTube 字幕解析、清洗与智能分块 v2.0
+"""YouTube 字幕解析、清洗与智能分块 v2.1
 
 增强项:
 - 双语话题边界检测（英文 + 中文）
@@ -7,6 +7,7 @@
 - 双输入格式自动检测（VTT / raw text）
 - CLI 参数化 + JSON 结构化输出
 - 中文语气词处理
+- v2.1: 多行格式自动保障，防止单行文件导致下游读取截断
 
 用法:
     python parse_clean.py --input-dir <dir> --video-id <id> [--lang zh|en]
@@ -233,6 +234,37 @@ def chunk_transcript(cleaned_segments, topic_boundaries):
 
 
 # ═══════════════════════════════════════════════════════
+# v2.1: 多行格式保障
+# ═══════════════════════════════════════════════════════
+
+def _ensure_multiline(filepath, min_lines=50):
+    """若文件行数过少（单行或少量行但字符数大），按句子边界重新格式化为多行。
+    
+    这解决了 transcript_clean.txt 为单行文件时下游 read 工具只能读到开头部分、
+    导致 make-report subagent 基于不完整输入生成截断文章的问题。
+    """
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    lines = content.split('\n')
+    if len(lines) >= min_lines:
+        return  # 已经足够多行，无需处理
+    
+    # 按句子边界分割：英文句号/问号/感叹号后空格接大写字母
+    multiline = re.sub(r'(?<=[.!?])\s+(?=[A-Z])', '\n', content)
+    # 中文句号/感叹号/问号后
+    multiline = re.sub(r'(?<=[。！？])\s*', '\n', multiline)
+    # 也处理 >> 分隔符（主持人/嘉宾切换标记）
+    multiline = re.sub(r'\s*>>\s*', '\n', multiline)
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(multiline)
+    
+    new_lines = multiline.count('\n') + 1
+    print(f"[parse_clean] 多行格式化: {filepath} ({len(lines)} 行 → {new_lines} 行, {len(content)} 字符)", file=sys.stderr)
+
+
+# ═══════════════════════════════════════════════════════
 # 主流程
 # ═══════════════════════════════════════════════════════
 
@@ -302,6 +334,11 @@ def main():
     clean_path = os.path.join(input_dir, 'transcript_clean.txt')
     with open(clean_path, 'w', encoding='utf-8') as f:
         f.write(full)
+
+    # ── v2.1: 多行格式保障 ──
+    # 检测并修复单行文件问题：若文件行数过少但字符数较大，
+    # 按句子边界重新格式化为多行，防止下游 read 工具读取截断
+    _ensure_multiline(clean_path, min_lines=50)
 
     # ── 智能分块 ──
     chunks = chunk_transcript(cleaned_segments, topic_boundaries)

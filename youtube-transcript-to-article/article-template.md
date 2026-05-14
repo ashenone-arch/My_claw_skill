@@ -1,4 +1,4 @@
-# 文章撰写规则 v2.0
+# 文章撰写规则 v2.1
 
 > 本文档是 `youtube-transcript-to-article` skill 的共用规则模板。
 > 分支 A（短文本 / make-report）和分支 B（长文本 / 并行撰写）均须遵循。

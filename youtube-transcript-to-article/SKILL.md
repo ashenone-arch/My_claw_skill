@@ -1,22 +1,25 @@
 ---
 name: youtube-transcript-to-article
 description: 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成完整书面文章并保存为 .md 文件。
-version: v2.0
+version: v2.1
 ---
 
-# YouTube 视频字幕转书面文章 v2.0
+# YouTube 视频字幕转书面文章 v2.1
 
 ## 概述
 
 接收 YouTube 视频链接，一键生成完整书面整理稿，保存至 `D:\AlphaClaw\Podcast\【{上传日期}】-{标题}.md`。
 
-v2.0 核心改进：
+v2.1 核心改进（基于 v2.0 的基础上）：
 - **规则外置**：文章撰写规则提取为 `article-template.md`，分支 A / B 共享，消除重复
 - **脚本持久化**：`scripts/fetch.py` 和 `scripts/parse_clean.py` 预置在 skill 目录，无需每次写入
 - **缓存机制**：同一视频重复执行时跳过下载和清洗步骤
 - **双语话题检测**：parse_clean.py 同时支持英文和中文话题边界信号
 - **长文本并行**：超 6 块时采用并行 make-report subagent 策略
 - **完整性验证**：文章生成后自动检查是否覆盖所有话题
+- **多行格式保障**：parse_clean.py 输出自动检测并修复单行文件，防止下游读取截断
+- **兜底格式检测**：步骤 4b 独立多行格式兜底，覆盖历史缓存文件
+- **验证强化**：步骤 6 从目视检查升级为量化覆盖率检查（≥85% 阈值）
 
 ---
 
@@ -98,6 +101,45 @@ python "{SKILL_BASE_DIR}/scripts/parse_clean.py" --input-dir "D:\AlphaClaw\Podca
 - 中文：提问句式、话题过渡、结束语
 - 双语气词去除（en + zh）
 
+### 步骤 4b：多行格式兜底检测
+
+> **关键步骤**：无论是否命中缓存，在进入步骤 5 之前必须执行此检查。
+
+此步骤防御两类单行文件问题：
+1. `parse_clean.py` 历史版本（v2.0 及之前）输出的单行文件（缓存中可能存在旧文件）
+2. 任何因写入异常导致的单行文件
+
+**检查方法**：
+
+```bash
+python -c "
+import os, re
+path = r'D:\AlphaClaw\Podcast\cache\{video_id}\transcript_clean.txt'
+paths = [path]
+work_path = r'D:\AlphaClaw\Podcast\transcript_clean.txt'
+if os.path.exists(work_path):
+    paths.append(work_path)
+for p in paths:
+    if not os.path.exists(p): continue
+    with open(p, 'r', encoding='utf-8') as f:
+        content = f.read()
+    lines = content.count(chr(10)) + 1 if content else 0
+    chars = len(content)
+    if chars > 30000 and lines < 100:
+        multiline = re.sub(r'(?<=[.!?])\s+(?=[A-Z])', chr(10), content)
+        multiline = re.sub(r'(?<=[\u3002\uff01\uff1f])\s*', chr(10), multiline)
+        multiline = re.sub(r'\s*>>\s*', chr(10), multiline)
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(multiline)
+        new_lines = multiline.count(chr(10)) + 1
+        print(f'多行格式化: {lines} 行 -> {new_lines} 行')
+    else:
+        print(f'格式正常: {lines} 行, {chars} 字符')
+"
+```
+
+> 检测逻辑与 `parse_clean.py` v2.1 内置的 `_ensure_multiline` 一致。此步骤作为独立兜底，覆盖历史缓存、v2.0 输出和任何边缘情况。检测到单行文件时自动按句子边界格式化为多行。
+
 ### 步骤 5：生成书面文章
 
 **先读取文章撰写规则模板**（所有分支均需）：
@@ -113,7 +155,13 @@ python "{SKILL_BASE_DIR}/scripts/parse_clean.py" --input-dir "D:\AlphaClaw\Podca
 
 #### 分支 A：短文本（chunked=false，≤10 万字）
 
-将清洗文本直接传给 make-report subagent：
+**前提**：步骤 4b 已确保 `transcript_clean.txt` 为多行格式（行数 ≥ 100）。若步骤 4b 检测到单行文件且自动修复失败，不要走此分支——改用下方 **A3 备选路径**。
+
+根据文本长度选择子策略：
+
+##### A1：极短文本（<3 万字）
+
+将字幕内容直接嵌入 prompt，省去一次文件读取：
 
 ```
 Task(
@@ -122,7 +170,7 @@ Task(
     prompt="你是一位专业播客整理编辑。请将以下 YouTube 视频的完整字幕整理为书面文章。
 
 **文章撰写规则**（详见下方，已从 article-template.md 加载）：
-[此处逐条列出 article-template.md 的 7 条规则——保真底线、时间线忠实、主持人话语处理、叙事vs说明双轨、极简过渡句、专有名词标注、输出格式]
+[此处逐条列出 7 条规则]
 
 视频标题：{title}
 上传日期：{upload_date_formatted}
@@ -136,7 +184,40 @@ Task(
 )
 ```
 
-> **关键优化**：短文本（<3 万字）时，将字幕内容直接放入 prompt 而非让 subagent 读文件，省去一次文件读取操作。若文本较长（3-10 万字），则改为让 subagent 读取 `transcript_clean.txt` 文件。
+##### A2：中等文本（3-10 万字）
+
+让 make-report subagent 自行读取文件。**prompt 中必须明确指示分多次 read 完整文件**：
+
+```
+Task(
+    subagent_type="make-report",
+    description="生成 YouTube 视频书面整理稿",
+    prompt="你是一位专业播客整理编辑。请将以下 YouTube 视频的完整字幕整理为书面文章。
+
+**重要**：字幕文件路径为 D:\AlphaClaw\Podcast\cache\{video_id}\transcript_clean.txt。
+该文件约 {total_chars} 字符（多行格式），请使用 read 工具**分多次读取完整文件**（例如 read(path, limit=2000) 然后 read(path, offset=2000, limit=2000) 继续...），确保覆盖全文后再开始撰写。不完整读取会导致文章严重截断。
+
+**文章撰写规则**：
+[此处逐条列出 7 条规则]
+
+视频标题：{title}
+上传日期：{upload_date_formatted}
+
+请严格按规则整理为 Markdown 书面文章，直接输出最终内容。",
+    stream_to_parent=True
+)
+```
+
+> **关键**：prompt 中的"分多次读取"指令和 {total_chars} 信息让 subagent 知道文件大小，避免单次 read 输出截断。
+
+##### A3：备选——主 agent 直接撰写（B1 降级）
+
+当以下任一情况发生时，改用主 agent 直接撰写（与 B1 相同流程）：
+
+- 步骤 4b 检测到单行文件且自动修复失败
+- 用户反馈文章被截断，需要重新生成
+
+操作：主 agent 分多次 `read` 读取完整 `transcript_clean.txt`，按照 `article-template.md` 的 7 条规则直接撰写完整 Markdown 文章，使用 `write` 工具输出。
 
 ---
 
@@ -186,18 +267,33 @@ Task(
 
 ### 步骤 6：完整性验证
 
-文章生成后，执行轻量验证——检查是否覆盖了所有主要话题：
+文章生成后，执行量化覆盖率检查，拦截"漏掉后半段"的严重错误。
 
-1. 用一段极简 prompt 让模型从 `transcript_clean.txt` 中提取 8-15 个主要话题/关键词：
+**6.1 提取话题列表**：
+
+读取 `transcript_clean.txt` 的**完整内容**（分多次 read 确保覆盖全文），用一段极简 prompt 让模型提取 10-15 个主要话题/关键词：
 
 ```
-读出 transcript_clean.txt，列出这段对话中讨论的主要话题和关键词（8-15个），每行一个，不需要解释。
+读取上述文件的完整内容（分多次 read 确保完整覆盖），列出这段对话中讨论的主要话题和关键词（10-15个），每行一个。格式：`- 话题描述`。不需要解释。
 ```
 
-2. 快速目视检查这些话题是否都在生成的文章中出现
-3. 若发现明显遗漏（≥2 个话题完全缺失），回到步骤 5 重新生成对应部分
+**6.2 覆盖率计算**：
 
-> 此步骤预计增加 1 次快速工具调用，但能有效拦截"漏掉后半段"的严重错误。
+对 6.1 中提取的每个话题，在生成的文章中检查是否出现。判定标准：
+- 话题的核心关键词（或其同义表达）在文章中出现 → 匹配
+- 话题完全未提及或仅有标题而无实质内容 → 缺失
+
+计算覆盖率 = 匹配话题数 / 总话题数。
+
+**6.3 判定与处理**：
+
+| 覆盖率 | 判定 | 动作 |
+|--------|------|------|
+| ≥ 85% | 通过 | 继续步骤 7 |
+| 60%-84% | 部分截断 | 检查缺失话题集中在文章哪个位置（前 1/3、中间、末尾）。若集中在末尾则确认为读取截断，回到步骤 5 选用 **A3（主 agent 直接撰写）** 重新生成 |
+| < 60% | 严重截断 | 回到步骤 5 选用 **A3（主 agent 直接撰写）**，确保分多次 read 读取完整文件后撰写 |
+
+> 此步骤将验证从不可靠的目视检查升级为可量化的覆盖率判定（≥85% 通过阈值），能有效捕获因单行文件或 subagent 读取不完整导致的话题遗漏。
 
 ### 步骤 7：保存文章文件
 
