@@ -1,6 +1,6 @@
 ---
 name: skill-sync
-version: "1.5"
+version: "1.6"
 description: "GitHub Skill 同步工具，支持本地↔云端双向同步；README 版本列表以云端 Skill 为基准生成。"
 ---
 
@@ -18,6 +18,29 @@ description: "GitHub Skill 同步工具，支持本地↔云端双向同步；RE
 - **本地独有 Skill**（MCP 相关等）：保留不动，不同步
 - **Token 验证**：每次同步前验证 token 有效性，无效则停止
 - **README 以云端为基准**：README 版本列表从 GitHub API 获取远程仓库中的 Skill 版本，不再扫描本地目录
+
+## 版本提取铁律（v1.6 新增）
+
+> 以下规则基于国内网络环境下的实战教训，必须遵守。
+
+| # | 规则 | 说明 |
+|---|------|------|
+| 1 | **API 优先** | 版本提取优先使用 `GET /repos/{owner}/{repo}/contents/{skill}/{file}`（返回 base64 内容），raw.githubusercontent.com 仅作最后兜底 |
+| 2 | **先列目录，再取文件** | 获取远程 skill 列表后，对每个 skill 先 `GET /repos/{owner}/{repo}/contents/{skill}` 列出实际文件名，处理大小写差异（如 `skill.md` vs `SKILL.md`） |
+| 3 | **交叉验证** | raw URL 返回 404 时，必须用 API 目录内容接口确认文件是否真的不存在，禁止单来源下结论 |
+| 4 | **并行获取** | 所有远程 skill 的版本号在同一条消息中并行获取，禁止串行 curl |
+| 5 | **语义化版本比较** | `v1.0 < v1.1 < v2.0`，禁止纯字符串比较；版本号格式不一时（如 `1.0` vs `"1.0"` vs `v1.0`），统一去掉引号和 v 前缀后比较 |
+
+## Python 调用规范（v1.6 新增）
+
+> Windows Git Bash 环境下 Python 调用有特定约束。
+
+| # | 规则 |
+|---|------|
+| 1 | 必须使用完整 Python 路径：`D:/AlphaEngine/resources/python/python/python.exe`，不用 `python` 或 `python3` |
+| 2 | 禁止 `python -c "..."` + stdin pipe（exit code 49），改用文件读取方式 |
+| 3 | `/tmp/` 路径在 Windows Python 中不可见，临时文件使用 `$HOME/.alphaclaw/tmp/` 替代 |
+| 4 | API 响应先 curl 保存到文件，再用 Python 从文件读取并解码，避免管道缓冲问题 |
 
 ## 配置管理
 
@@ -109,6 +132,7 @@ Token 无效时：
 | 推送本地 Skill | 上传可推送 Skill | scripts/push.py |
 | 维护 README | 版本变化后自动更新 | scripts/readme_ops.py |
 | Token 无效 | 提示重新配置 | 停止并提示用户 |
+| 远程版本取不到 | 先 API 目录内容确认文件名 → API base64 解码 → raw URL 兜底 | 见"版本提取铁律" |
 
 ## 进阶参考
 
