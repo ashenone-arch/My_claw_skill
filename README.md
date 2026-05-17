@@ -37,7 +37,7 @@
 
 | Skill | 版本 | 核心功能 |
 |-------|------|---------|
-| [skill-sync](skill-sync/) | v1.7 | Skill本地与GitHub双向同步 |
+| [skill-sync](skill-sync/) | v1.8 | Skill本地与GitHub双向同步 |
 | [fact-hub-sync](fact-hub-sync/) | v1.0 | Fact Hub知识库GitHub同步备份 |
 
 <!-- SKILL_TABLE_END -->
