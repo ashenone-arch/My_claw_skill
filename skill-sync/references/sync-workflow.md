@@ -74,7 +74,7 @@
 对每个"可推送" Skill，使用 **scripts/push.py**：
 
 ```
-python "D:\AlphaEngine\resources\python\python\python.exe" scripts/push.py \
+python scripts/push.py \
   --skill {skill-name} --owner {owner} --repo {repo} --token {token} --branch main
 ```
 
@@ -87,7 +87,7 @@ python "D:\AlphaEngine\resources\python\python\python.exe" scripts/push.py \
 执行 **scripts/readme_ops.py**：
 
 ```
-python "D:\AlphaEngine\resources\python\python\python.exe" scripts/readme_ops.py \
+python scripts/readme_ops.py \
   --action update --owner {owner} --repo {repo} --token {token}
 ```
 
