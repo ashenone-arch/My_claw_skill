@@ -122,8 +122,18 @@ def get_remote_skills(token, owner, repo):
         if name in skip_dirs or name.startswith('.') or name.startswith('mcp--'):
             continue
 
-        skill_md_url = f'{skills_url}/{name}/SKILL.md'
+        # 先列目录，找到实际的 SKILL.md 文件名（处理大小写差异）
         try:
+            dir_contents = _api_request(f'{skills_url}/{name}', token)
+            skill_md_filename = None
+            for f in dir_contents:
+                if f['name'].lower() == 'skill.md':
+                    skill_md_filename = f['name']
+                    break
+            if not skill_md_filename:
+                continue
+
+            skill_md_url = f'{skills_url}/{name}/{skill_md_filename}'
             file_data = _api_request(skill_md_url, token)
             if 'content' in file_data:
                 content = base64.b64decode(file_data['content']).decode('utf-8')
