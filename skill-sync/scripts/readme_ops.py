@@ -12,8 +12,6 @@ import time
 import ssl
 import urllib.request
 
-PYTHON = r"D:\AlphaEngine\resources\python\python\python.exe"
-
 # 全局 SSL 上下文（启动时初始化，失败则为 None）
 _GLOBAL_SSL_CTX = None
 try:
@@ -167,12 +165,10 @@ def generate_readme_content(skills):
         '',
         '在 AlphaClaw 中，直接向助理描述需求即可自动触发对应 Skill。',
         '',
-        '示例：',
-        '- "深度研究一下贵州茅台" → 触发 `equity-deep-research`',
-        '- "今天机构抱团什么方向" → 触发 `daily-seller-hotspot`',
-        '- "用霍华德马克斯框架分析这只股票" → 触发 `howard-marks-framework`',
-        '- "同步我的 skill" → 触发 `skill-sync`',
-        '- "这几篇都在聊 AI，帮我按话题做个总结" → 触发 `cross-talk-synthesis`',
+         '示例：',
+        '- "同步我的 skill" → 触发对应 Skill',
+        '- "深度研究一下某公司" → 触发对应 Skill',
+        '- "今天机构抱团什么方向" → 触发对应 Skill',
         '',
         '## 版本说明',
         '',
