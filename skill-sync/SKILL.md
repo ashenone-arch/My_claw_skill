@@ -37,23 +37,37 @@ description: "GitHub Skill 同步工具，支持本地↔云端双向同步；RE
 
 | # | 规则 |
 |---|------|
-| 1 | 必须使用完整 Python 路径：`D:/AlphaEngine/resources/python/python/python.exe`，不用 `python` 或 `python3` |
+| 1 | 使用系统内置 Python（AI 助手自动定位），不用系统默认的 `python` 或 `python3` |
 | 2 | 禁止 `python -c "..."` + stdin pipe（exit code 49），改用文件读取方式 |
 | 3 | `/tmp/` 路径在 Windows Python 中不可见，临时文件使用 `$HOME/.alphaclaw/tmp/` 替代 |
 | 4 | API 响应先 curl 保存到文件，再用 Python 从文件读取并解码，避免管道缓冲问题 |
 
 ## 配置管理
 
-配置文件：`~/.alphaclaw/skills/skill-sync/github-config.json`
+> **隐私保护**：`github-config.json` 包含 Token 等敏感信息，**不会被推送到 GitHub 仓库**（`scripts/push.py` 自动排除）。首次使用时复制模板：
+
+```bash
+cd ~/.alphaclaw/skills/skill-sync/
+cp github-config.example.json github-config.json
+```
+
+配置文件格式（`github-config.json`）：
 
 ```json
 {
-  "repo_owner": "ashenone-arch",
-  "repo_name": "My_claw_skill",
-  "token": "ghp_xxx",
+  "repo_owner": "<your-github-username>",
+  "repo_name": "<your-repo-name>",
+  "token": "<your-github-personal-access-token>",
   "branch": "main"
 }
 ```
+
+| 字段 | 说明 |
+|------|------|
+| `repo_owner` | GitHub 用户名或组织名 |
+| `repo_name` | Skill 仓库名称 |
+| `token` | GitHub Personal Access Token（需 `repo` 权限） |
+| `branch` | 目标分支，默认 `main` |
 
 ## 执行步骤
 
@@ -90,7 +104,7 @@ description: "GitHub Skill 同步工具，支持本地↔云端双向同步；RE
 对每个"可推送" Skill，使用 **scripts/push.py**：
 
 ```
-python "D:\AlphaEngine\resources\python\python\python.exe" scripts/push.py \
+python scripts/push.py \
   --skill {skill-name} --owner {owner} --repo {repo} --token {token} --branch main
 ```
 
@@ -103,7 +117,7 @@ python "D:\AlphaEngine\resources\python\python\python.exe" scripts/push.py \
 推送成功后才执行。使用 **scripts/readme_ops.py**：
 
 ```
-python "D:\AlphaEngine\resources\python\python\python.exe" scripts/readme_ops.py \
+python scripts/readme_ops.py \
   --action update --owner {owner} --repo {repo} --token {token}
 ```
 
