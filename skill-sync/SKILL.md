@@ -1,7 +1,7 @@
 ---
 name: skill-sync
-version: "1.7"
-description: "GitHub Skill 同步工具，支持本地↔云端双向同步；README 锚点保护模式——仅替换版本表格，自定义内容永久保留。"
+version: "1.8"
+description: "GitHub Skill 同步工具，支持本地↔云端双向同步；README 工作流分阶段表格 + 锚点保护模式。"
 ---
 
 # GitHub Skill 同步工具
