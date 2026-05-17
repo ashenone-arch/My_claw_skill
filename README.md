@@ -1,8 +1,12 @@
 # My Claw Skills
 
-> 个人日常投资研究使用的 AlphaClaw Skill 集合，版本信息见各 Skill 的 Release
+> 个人日常投资研究使用的 AlphaClaw Skill 集合。
+> `<!-- SKILL_TABLE_START -->` 到 `<!-- SKILL_TABLE_END -->` 之间的表格由 skill-sync 自动维护，
+> 请勿手动编辑表格内容。标记外的区域可自由自定义。
 
 ## 目录
+
+<!-- SKILL_TABLE_START -->
 
 | Skill | 说明 | 版本 |
 |-------|------|------|
@@ -16,6 +20,8 @@
 | [howard-marks-framework](howard-marks-framework/) | 当用户想要用霍华德·马克斯（Howard Marks）的投资框架来评估某个投资标的（股票、债券、基金、行业等）或审查投资... | v2.1 |
 | [pdf-batch-extract](pdf-batch-extract/) | 当用户需要将文件夹内多个 PDF 统一提取原文和表格为 MD 文件时使用。即使用户说"批量提取 PDF"、"把 PDF ... | v1.1 |
 | [youtube-transcript-to-article](youtube-transcript-to-article/) | 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成完整书面文章并保存为... | v2.2 |
+
+<!-- SKILL_TABLE_END -->
 
 ## 使用方式
 
