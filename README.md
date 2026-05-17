@@ -1,62 +1,37 @@
 # My Claw Skills
 
-> 个人投资研究使用的 AlphaClaw Skill 集合，覆盖信息收集、整理、处理/决策的完整投研链路。
+> 个人日常投资研究使用的 AlphaClaw Skill 集合，版本信息见各 Skill 的 Release
 
----
+## 目录
 
-## 投资研究工作流
-
-### 1. 信息收集 — 从多元渠道获取原始材料
-
-在研究启动前，先确保信息获取渠道覆盖到位：
-
-| Skill | 版本 | 解决什么问题 |
-|-------|------|------------|
-| [daily-seller-hotspot](daily-seller-hotspot/) | v1.0 | 每日扫描卖方抱团方向，识别机构注意力集中在哪些赛道和个股 |
-| [youtube-transcript-to-article](youtube-transcript-to-article/) | v2.2 | 视频/播客字幕自动转书面文章，碎片化口语内容变为可检索、可引用的文本 |
-| [pdf-batch-extract](pdf-batch-extract/) | v1.1 | 批量提取研报、公告、招股书 PDF 的原文和表格，统一转为 Markdown |
-
-### 2. 信息整理 — 碎片信息结构化沉淀
-
-收集到的材料需要去重、串联、沉淀，否则看过就忘：
-
-| Skill | 版本 | 解决什么问题 |
-|-------|------|------------|
-| [fact-hub](fact-hub/) | v1.9 | 事实、观点、冲突三层知识库，追踪你的认知迭代，标记待验证的矛盾点 |
-| [cross-talk-synthesis](cross-talk-synthesis/) | v2.4 | 多篇对谈交叉汇总，按话题轴心组织不同嘉宾的观点碰撞，发现共识与分歧 |
-
-### 3. 信息处理 / 决策 — 形成可执行的投资判断
-
-信息整理到位后，用框架化工具输出可操作的结论：
-
-| Skill | 版本 | 解决什么问题 |
-|-------|------|------------|
-| [equity-deep-research](equity-deep-research/) | v2.9 | A 股上市公司 9 段深度投研框架，覆盖商业模式、财务、估值、风险等维度 |
-| [howard-marks-framework](howard-marks-framework/) | v2.1 | 用霍华德-马克斯投资框架评估标的或审查组合，聚焦第二层次思维 |
-| [dd-qlist](dd-qlist/) | v1.0 | 一级市场科技项目尽调清单生成，假设驱动提问，覆盖 6 大维度 |
-
-### 系统工具
-
-| Skill | 版本 | 说明 |
+| Skill | 说明 | 版本 |
 |-------|------|------|
-| [skill-sync](skill-sync/) | v1.6 | Skill 同步工具，本地与 GitHub 双向同步 |
-| [fact-hub-sync](fact-hub-sync/) | v1.0 | Fact Hub 知识库 GitHub 同步备份 |
-
----
+| [skill-sync](skill-sync/) | GitHub Skill 同步工具，支持本地↔云端双向同步；README 版本列表以云端 Skill 为基准生成。 | v1.6 |
+| [cross-talk-synthesis](cross-talk-synthesis/) | 当用户需要将多篇已有的对谈文章（不同嘉宾、不同时间但围绕同一主题）汇总为一篇以话题为轴心的交叉分析文章时触发。即使用户说... | v2.4 |
+| [daily-seller-hotspot](daily-seller-hotspot/) | 当用户需要了解当日卖方/机构关注的热点方向、生成卖方热点选股报告时使用。触发场景包括："今天卖方抱团什么"、"今天机构热... | v1.0 |
+| [dd-qlist](dd-qlist/) | 当用户提供一级市场科技项目的公司介绍材料（BP、产品介绍、技术文档、商业计划书等），要求生成发给公司回答的尽调问题清单时... | v1.0 |
+| [equity-deep-research](equity-deep-research/) | 当用户需要对A股上市公司进行深度研究、分析公司基本面、撰写投研素材时使用。触发场景包括："深度研究 XX公司"、"分析一... | v2.9 |
+| [fact-hub](fact-hub/) | 当用户需要沉淀信息、追踪认知迭代、拆解研究问题时触发。触发场景包括："帮我整理这些材料"、"把这件事沉淀到知识库"、"最... | v1.10 |
+| [fact-hub-sync](fact-hub-sync/) | Fact Hub 知识库同步工具，将本地 Fact Hub 内容推送到 GitHub 仓库。支持增量推送（hash 对比... | v1.0 |
+| [howard-marks-framework](howard-marks-framework/) | 当用户想要用霍华德·马克斯（Howard Marks）的投资框架来评估某个投资标的（股票、债券、基金、行业等）或审查投资... | v2.1 |
+| [pdf-batch-extract](pdf-batch-extract/) | 当用户需要将文件夹内多个 PDF 统一提取原文和表格为 MD 文件时使用。即使用户说"批量提取 PDF"、"把 PDF ... | v1.1 |
+| [youtube-transcript-to-article](youtube-transcript-to-article/) | 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成完整书面文章并保存为... | v2.2 |
 
 ## 使用方式
 
-在 AlphaClaw 中，直接向助理描述需求即可自动触发对应 Skill。例如：
+在 AlphaClaw 中，直接向助理描述需求即可自动触发对应 Skill。
 
-- "帮我深度研究一下贵州茅台" → 触发 `equity-deep-research`
-- "用马克斯框架评估这只股票" → 触发 `howard-marks-framework`
-- "今天机构抱团什么方向" → 触发 `daily-seller-hotspot`
-- "帮我整理这些材料到知识库" → 触发 `fact-hub`
+示例：
+- "同步我的 skill" → 触发对应 Skill
+- "深度研究一下某公司" → 触发对应 Skill
+- "今天机构抱团什么方向" → 触发对应 Skill
 
 ## 版本说明
 
-每个 Skill 独立维护版本号，格式 `{skill-name}-v{version}`。版本号标注在各 Skill 的 `SKILL.md` frontmatter 中。
+每个 Skill 独立打 Tag，格式为 `{skill-name}-v{version}`。
+如需回溯历史版本，请访问对应 Tag 的 Release 页面。
 
 ## 免责声明
 
-本仓库中的 Skill 仅供个人投资研究使用，不构成任何投资建议。投资有风险，决策需谨慎。
+本仓库中的 Skill 仅供个人投资研究使用，不构成任何投资建议。
+投资有风险，决策需谨慎。
