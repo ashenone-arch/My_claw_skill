@@ -59,11 +59,11 @@ git push/push API 返回成功不等于 README 实际已更新（网络中断时
 ## 执行命令
 
 ```bash
-python "D:\AlphaEngine\resources\python\python\python.exe" scripts/readme_ops.py \
+python scripts/readme_ops.py \
   --action update \
-  --owner ashenone-arch \
-  --repo My_claw_skill \
-  --token ghp_xxx
+  --owner <owner> \
+  --repo <repo> \
+  --token <token>
 ```
 
 ## 故障场景
