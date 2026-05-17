@@ -1,7 +1,10 @@
-""" readme_ops.py - README 自动维护脚本
+""" readme_ops.py - README 自动维护脚本 v2.0
 
 功能：从 GitHub API 获取远程仓库中所有 Skill 的版本列表，更新到 GitHub README
-特性：README 版本列表以云端 Skill 为基准，不再扫描本地目录
+特性：
+  - 锚点保护：仅替换 <!-- SKILL_TABLE_START --> ... <!-- SKILL_TABLE_END --> 之间的版本表格
+  - README 中标记外的自定义内容永久保留
+  - 首次运行或无标记时，生成带锚点的完整 README
 验证：更新后检查版本列表是否正确（失败重试最多 3 次）
 """
 import sys
@@ -11,6 +14,9 @@ import base64
 import time
 import ssl
 import urllib.request
+
+TABLE_START = '<!-- SKILL_TABLE_START -->'
+TABLE_END = '<!-- SKILL_TABLE_END -->'
 
 # 全局 SSL 上下文（启动时初始化，失败则为 None）
 _GLOBAL_SSL_CTX = None
@@ -68,12 +74,11 @@ def _api_request(url, token, method='GET', data=None, max_retry=2):
             if method != 'GET':
                 req.get_method = lambda: method
             if data and method == 'GET':
-                pass  # data should not be set for GET
+                pass
             with urllib.request.urlopen(req, **kw) as r:
                 return json.loads(r.read())
         except Exception as e:
             err_str = str(e)
-            # SSL 错误时尝试禁用 SSL 验证
             if attempt == 0 and ('SSL' in err_str or 'EOF' in err_str or 'ssl' in err_str.lower()):
                 try:
                     fallback_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -122,7 +127,6 @@ def get_remote_skills(token, owner, repo):
         if name in skip_dirs or name.startswith('.') or name.startswith('mcp--'):
             continue
 
-        # 先列目录，找到实际的 SKILL.md 文件名（处理大小写差异）
         try:
             dir_contents = _api_request(f'{skills_url}/{name}', token)
             skill_md_filename = None
@@ -150,18 +154,15 @@ def get_remote_skills(token, owner, repo):
     return skills
 
 
-def generate_readme_content(skills):
-    """生成 README 内容"""
-    lines = [
-        '# My Claw Skills',
-        '',
-        '> 个人日常投资研究使用的 AlphaClaw Skill 集合，版本信息见各 Skill 的 Release',
-        '',
-        '## 目录',
-        '',
+def generate_table_block(skills):
+    """生成仅含锚点标记的版本表格块（用于替换已有 README 中的表格区域）"""
+    lines = [TABLE_START, '']
+
+    # 表格头
+    lines.extend([
         '| Skill | 说明 | 版本 |',
         '|-------|------|------|',
-    ]
+    ])
 
     # skill-sync 排第一，其余按名称排序
     skill_sync_list = [s for s in skills if s['name'] == 'skill-sync']
@@ -169,13 +170,30 @@ def generate_readme_content(skills):
     for s in skill_sync_list + others:
         lines.append(f"| [{s['name']}]({s['name']}/) | {s['description']} | v{s['version']} |")
 
-    lines.extend([
+    lines.append('')
+    lines.append(TABLE_END)
+    return '\n'.join(lines)
+
+
+def generate_full_readme(skills):
+    """生成带锚点的完整 README（仅首次初始化或旧格式 README 无锚点时使用）"""
+    table_block = generate_table_block(skills)
+    return '\n'.join([
+        '# My Claw Skills',
+        '',
+        '> 个人日常投资研究使用的 AlphaClaw Skill 集合。',
+        '> `<!-- SKILL_TABLE_START -->` 到 `<!-- SKILL_TABLE_END -->` 之间的表格由 skill-sync 自动维护，',
+        '> 请勿手动编辑表格内容。标记外的区域可自由自定义。',
+        '',
+        '## 目录',
+        '',
+        table_block,
         '',
         '## 使用方式',
         '',
         '在 AlphaClaw 中，直接向助理描述需求即可自动触发对应 Skill。',
         '',
-         '示例：',
+        '示例：',
         '- "同步我的 skill" → 触发对应 Skill',
         '- "深度研究一下某公司" → 触发对应 Skill',
         '- "今天机构抱团什么方向" → 触发对应 Skill',
@@ -191,7 +209,30 @@ def generate_readme_content(skills):
         '投资有风险，决策需谨慎。',
     ])
 
-    return '\n'.join(lines)
+
+def get_existing_readme(token, owner, repo):
+    """获取远程 README 当前文本内容，不存在则返回 None"""
+    try:
+        url = f'https://api.github.com/repos/{owner}/{repo}/contents/README.md?ref=main'
+        data = _api_request(url, token)
+        if 'content' in data:
+            return base64.b64decode(data['content']).decode('utf-8')
+    except Exception:
+        pass
+    return None
+
+
+def merge_readme(existing_content, skills):
+    """将版本表格块合并到已有 README 中（锚点保护模式）"""
+    if existing_content and TABLE_START in existing_content and TABLE_END in existing_content:
+        # 锚点保护：仅替换标记之间的内容
+        before = existing_content.split(TABLE_START)[0]
+        after = existing_content.split(TABLE_END)[1]
+        table_block = generate_table_block(skills)
+        return before + table_block + after
+    else:
+        # 无锚点：生成完整 README（含锚点，后续更新即受保护）
+        return generate_full_readme(skills)
 
 
 def update_readme(token, owner, repo, content, max_retry=3):
@@ -261,7 +302,9 @@ if __name__ == '__main__':
             print(json.dumps({'success': False, 'message': 'Missing required args'}))
             sys.exit(1)
         skills = get_remote_skills(args.token, args.owner, args.repo)
-        content = generate_readme_content(skills)
+        # 锚点保护模式：读取已有 README，仅替换表格区域
+        existing = get_existing_readme(args.token, args.owner, args.repo)
+        content = merge_readme(existing, skills)
         success, msg = update_readme(args.token, args.owner, args.repo, content)
         print(json.dumps({'success': success, 'message': msg, 'skills_count': len(skills)}))
     else:
