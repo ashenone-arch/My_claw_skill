@@ -1,38 +1,71 @@
 # My Claw Skills
 
-> 个人日常投资研究使用的 AlphaClaw Skill 集合。
-> `<!-- SKILL_TABLE_START -->
+> 一套完整的A股投研工作流——将信息收集、整理、分析到决策的闭环，通过结构化Skill固化为自动化、标准化的投研操作系统。
 
-| Skill | 说明 | 版本 |
-|-------|------|------|
-| [skill-sync](skill-sync/) | GitHub Skill 同步工具，支持本地↔云端双向同步；README 锚点保护模式——仅替换版本表格，自定义内容永久... | v1.7 |
-| [cross-talk-synthesis](cross-talk-synthesis/) | 当用户需要将多篇已有的对谈文章（不同嘉宾、不同时间但围绕同一主题）汇总为一篇以话题为轴心的交叉分析文章时触发。即使用户说... | v2.4 |
-| [daily-seller-hotspot](daily-seller-hotspot/) | 当用户需要了解当日卖方/机构关注的热点方向、生成卖方热点选股报告时使用。触发场景包括："今天卖方抱团什么"、"今天机构热... | v1.0 |
-| [dd-qlist](dd-qlist/) | 当用户提供一级市场科技项目的公司介绍材料（BP、产品介绍、技术文档、商业计划书等），要求生成发给公司回答的尽调问题清单时... | v1.0 |
-| [equity-deep-research](equity-deep-research/) | 当用户需要对A股上市公司进行深度研究、分析公司基本面、撰写投研素材时使用。触发场景包括："深度研究 XX公司"、"分析一... | v2.9 |
-| [fact-hub](fact-hub/) | 当用户需要沉淀信息、追踪认知迭代、拆解研究问题时触发。触发场景包括："帮我整理这些材料"、"把这件事沉淀到知识库"、"最... | v1.10 |
-| [fact-hub-sync](fact-hub-sync/) | Fact Hub 知识库同步工具，将本地 Fact Hub 内容推送到 GitHub 仓库。支持增量推送（hash 对比... | v1.0 |
-| [howard-marks-framework](howard-marks-framework/) | 当用户想要用霍华德·马克斯（Howard Marks）的投资框架来评估某个投资标的（股票、债券、基金、行业等）或审查投资... | v2.1 |
-| [pdf-batch-extract](pdf-batch-extract/) | 当用户需要将文件夹内多个 PDF 统一提取原文和表格为 MD 文件时使用。即使用户说"批量提取 PDF"、"把 PDF ... | v1.1 |
-| [youtube-transcript-to-article](youtube-transcript-to-article/) | 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成完整书面文章并保存为... | v2.2 |
+---
 
-<!-- SKILL_TABLE_END -->` 之间的表格由 skill-sync 自动维护，
-> 请勿手动编辑表格内容。标记外的区域可自由自定义。
+## 仓库总览：完整的投研工作流
 
-## 目录
+10 个 Skill 系统性地覆盖投研各环节：
 
 <!-- SKILL_TABLE_START -->
 
-| Skill | 说明 | 版本 |
-|-------|------|------|
-| [skill-sync](skill-sync/) | GitHub Skill 同步工具，支持本地↔云端双向同步；README 版本列表以云端 Skill 为基准生成。 | v1.6 |
-| [cross-talk-synthesis](cross-talk-synthesis/) | 当用户需要将多篇已有的对谈文章（不同嘉宾、不同时间但围绕同一主题）汇总为一篇以话题为轴心的交叉分析文章时触发。即使用户说... | v2.4 |
-| [daily-seller-hotspot](daily-seller-hotspot/) | 当用户需要了解当日卖方/机构关注的热点方向、生成卖方热点选股报告时使用。触发场景包括："今天卖方抱团什么"、"今天机构热... | v1.0 |
-| [dd-qlist](dd-qlist/) | 当用户提供一级市场科技项目的公司介绍材料（BP、产品介绍、技术文档、商业计划书等），要求生成发给公司回答的尽调问题清单时... | v1.0 |
-| [equity-deep-research](equity-deep-research/) | 当用户需要对A股上市公司进行深度研究、分析公司基本面、撰写投研素材时使用。触发场景包括："深度研究 XX公司"、"分析一... | v2.9 |
-| [fact-hub](fact-hub/) | 当用户需要沉淀信息、追踪认知迭代、拆解研究问题时触发。触发场景包括："帮我整理这些材料"、"把这件事沉淀到知识库"、"最... | v1.10 |
-| [fact-hub-sync](fact-hub-sync/) | Fact Hub 知识库同步工具，将本地 Fact Hub 内容推送到 GitHub 仓库。支持增量推送（hash 对比... | v1.0 |
-| [howard-marks-framework](howard-marks-framework/) | 当用户想要用霍华德·马克斯（Howard Marks）的投资框架来评估某个投资标的（股票、债券、基金、行业等）或审查投资... | v2.1 |
-| [pdf-batch-extract](pdf-batch-extract/) | 当用户需要将文件夹内多个 PDF 统一提取原文和表格为 MD 文件时使用。即使用户说"批量提取 PDF"、"把 PDF ... | v1.1 |
-| [youtube-transcript-to-article](youtube-transcript-to-article/) | 当用户提供 YouTube 视频链接并要求"生成书面总结文章"时触发。将视频字幕自动下载、解析、生成完整书面文章并保存为... | v2.2 |
+### 信息收集
 
+| Skill | 版本 | 核心功能 |
+|-------|------|---------|
+| [daily-seller-hotspot](daily-seller-hotspot/) | v1.0 | 每日扫描卖方抱团方向，识别机构注意力焦点 |
+| [youtube-transcript-to-article](youtube-transcript-to-article/) | v2.2 | 视频/播客字幕自动转为书面文章 |
+| [pdf-batch-extract](pdf-batch-extract/) | v1.1 | 批量提取研报、公告PDF原文和表格为Markdown |
+
+### 信息整理
+
+| Skill | 版本 | 核心功能 |
+|-------|------|---------|
+| [fact-hub](fact-hub/) | v1.10 | 事实、观点、冲突三层知识库，追踪认知迭代 |
+| [cross-talk-synthesis](cross-talk-synthesis/) | v2.4 | 多篇对谈交叉汇总，按话题轴心组织观点碰撞 |
+
+### 分析/决策
+
+| Skill | 版本 | 核心功能 |
+|-------|------|---------|
+| [equity-deep-research](equity-deep-research/) | v2.9 | A股上市公司9段深度投研框架 |
+| [howard-marks-framework](howard-marks-framework/) | v2.1 | 霍华德·马克斯投资框架评估标的 |
+| [dd-qlist](dd-qlist/) | v1.0 | 一级市场科技项目尽调问题清单生成 |
+
+### 系统工具
+
+| Skill | 版本 | 核心功能 |
+|-------|------|---------|
+| [skill-sync](skill-sync/) | v1.7 | Skill本地与GitHub双向同步 |
+| [fact-hub-sync](fact-hub-sync/) | v1.0 | Fact Hub知识库GitHub同步备份 |
+
+<!-- SKILL_TABLE_END -->
+
+---
+
+## 方法论设计
+
+**投资哲学的内化**：将投资大师的思想工程化为具体指令。`howard-marks-framework` 将"第二层次思维"、"周期定位"等抽象概念转化为可执行的分析维度。
+
+**认知过程的外化**：这套Skill体系作为"外部大脑"，将投研中的隐性知识显性化。`fact-hub` 通过事实→观点→冲突三层结构，清晰展示个人认知如何迭代更新。
+
+**工作流的管线化**：投研流程拆解为 **信息收集 → 信息整理 → 分析/决策** 三个阶段，每个环节可独立优化、复用和迭代。
+
+---
+
+## 使用方式
+
+在 AlphaClaw 中直接向助理描述需求即可自动触发对应 Skill：
+
+- "今天机构抱团什么方向" → `daily-seller-hotspot`
+- "把这几篇对谈合并一下" → `cross-talk-synthesis`
+- "深度研究一下贵州茅台" → `equity-deep-research`
+- "用霍华德·马克斯的框架评估这个标的" → `howard-marks-framework`
+- "同步我的 Skill" → `skill-sync`
+
+---
+
+## 免责声明
+
+本仓库中的 Skill 仅供个人投资研究使用，不构成任何投资建议。投资有风险，决策需谨慎。
