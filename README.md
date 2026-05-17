@@ -13,7 +13,7 @@
 | Skill | 版本 | 解决什么问题 |
 |-------|------|------------|
 | [daily-seller-hotspot](daily-seller-hotspot/) | v1.0 | 每日扫描卖方抱团方向，识别机构注意力集中在哪些赛道和个股 |
-| [youtube-transcript-to-article](youtube-transcript-to-article/) | v2.1 | 视频/播客字幕自动转书面文章，碎片化口语内容变为可检索、可引用的文本 |
+| [youtube-transcript-to-article](youtube-transcript-to-article/) | v2.2 | 视频/播客字幕自动转书面文章，碎片化口语内容变为可检索、可引用的文本 |
 | [pdf-batch-extract](pdf-batch-extract/) | v1.1 | 批量提取研报、公告、招股书 PDF 的原文和表格，统一转为 Markdown |
 
 ### 2. 信息整理 — 碎片信息结构化沉淀
@@ -22,8 +22,8 @@
 
 | Skill | 版本 | 解决什么问题 |
 |-------|------|------------|
-| [fact-hub](fact-hub/) | v1.8 | 事实、观点、冲突三层知识库，追踪你的认知迭代，标记待验证的矛盾点 |
-| [cross-talk-synthesis](cross-talk-synthesis/) | v2.3 | 多篇对谈交叉汇总，按话题轴心组织不同嘉宾的观点碰撞，发现共识与分歧 |
+| [fact-hub](fact-hub/) | v1.9 | 事实、观点、冲突三层知识库，追踪你的认知迭代，标记待验证的矛盾点 |
+| [cross-talk-synthesis](cross-talk-synthesis/) | v2.4 | 多篇对谈交叉汇总，按话题轴心组织不同嘉宾的观点碰撞，发现共识与分歧 |
 
 ### 3. 信息处理 / 决策 — 形成可执行的投资判断
 
@@ -31,8 +31,8 @@
 
 | Skill | 版本 | 解决什么问题 |
 |-------|------|------------|
-| [equity-deep-research](equity-deep-research/) | v2.8 | A 股上市公司 9 段深度投研框架，覆盖商业模式、财务、估值、风险等维度 |
-| [howard-marks-framework](howard-marks-framework/) | v2.0 | 用霍华德-马克斯投资框架评估标的或审查组合，聚焦第二层次思维 |
+| [equity-deep-research](equity-deep-research/) | v2.9 | A 股上市公司 9 段深度投研框架，覆盖商业模式、财务、估值、风险等维度 |
+| [howard-marks-framework](howard-marks-framework/) | v2.1 | 用霍华德-马克斯投资框架评估标的或审查组合，聚焦第二层次思维 |
 | [dd-qlist](dd-qlist/) | v1.0 | 一级市场科技项目尽调清单生成，假设驱动提问，覆盖 6 大维度 |
 
 ### 系统工具
