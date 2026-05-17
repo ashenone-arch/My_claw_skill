@@ -184,10 +184,8 @@ def verify_readme(token, owner, repo):
         content = r.read().decode('utf-8')
 
     for line in content.split('\n'):
-        if 'equity-deep' in line:
-            assert 'v2.1' in line, f'equity-deep version wrong: {line}'
-        if 'skill-sync' in line:
-            assert 'v1.2' in line, f'skill-sync version wrong: {line}'
+        if 'my-skill' in line:
+            assert 'v1.0' in line, f'my-skill version wrong: {line}'
     return True
 ```
 
@@ -202,13 +200,9 @@ def verify_readme(token, owner, repo):
 
 | Skill | 说明 | 版本 |
 |-------|------|------|
-| [cross-talk-synthesis](cross-talk-synthesis/) | 多篇对谈交叉汇总，按话题轴心组织不同嘉宾观点碰撞 | v1.1 |
-| [daily-seller-hotspot](daily-seller-hotspot/) | 日度卖方/机构热点选股，识别机构抱团方向 | v1.0 |
-| [equity-deep-research](equity-deep-research/) | A股股票深度研究，9段框架输出投研素材包 | v2.1 |
-| [howard-marks-framework](howard-marks-framework/) | 霍华德·马克斯投资框架，评估标的/审查组合 | v1.0 |
-| [skill-sync](skill-sync/) | GitHub Skill 同步工具，支持本地→云端推送，自动维护 README 版本列表 | v1.2 |
-| [youtube-transcript-to-article](youtube-transcript-to-article/) | YouTube视频字幕转书面文章 | v1.0 |
-| [pdf-batch-extract](pdf-batch-extract/) | PDF 批量原文+表格提取为 MD，含页眉/页脚/页码自动清理 | v1.1 |
+| [skill-sync](skill-sync/) | GitHub Skill 同步工具，支持本地↔云端双向同步，自动维护 README 版本列表 | v1.6 |
+| [my-research-skill](my-research-skill/) | 示例：A股深度研究框架 | v2.0 |
+| [my-hotspot-skill](my-hotspot-skill/) | 示例：日度热点选股 | v1.0 |
 
 ## 使用方式
 
