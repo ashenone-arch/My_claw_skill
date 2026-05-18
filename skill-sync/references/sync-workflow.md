@@ -80,19 +80,6 @@ python scripts/push.py \
 
 推送后自动验证，验证失败重试（最多 1 次），仍失败则记录到结果报告。
 
-### 4.3 README 自动维护
-
-**时机**：任何同步导致版本变化后执行（推送成功后才执行）。
-
-执行 **scripts/readme_ops.py**：
-
-```
-python scripts/readme_ops.py \
-  --action update --owner {owner} --repo {repo} --token {token}
-```
-
-README 版本列表始终以云端 Skill 为基准。验证成功才算完成，未验证视为失败。
-
 ---
 
 ## 第五步：报告结果
@@ -102,5 +89,4 @@ README 版本列表始终以云端 Skill 为基准。验证成功才算完成，
 - 新增（远程 → 本地）：哪些 Skill
 - 更新（远程 → 本地）：哪些 Skill，版本变化
 - 推送（本地 → 远程）：哪些 Skill，版本变化
-- README 更新状态
 - 失败项及原因 + 重试建议

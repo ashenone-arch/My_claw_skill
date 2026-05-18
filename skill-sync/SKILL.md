@@ -1,23 +1,22 @@
 ---
 name: skill-sync
-version: "1.8"
-description: "GitHub Skill 同步工具，支持本地↔云端双向同步；README 工作流分阶段表格 + 锚点保护模式。"
+version: "1.9"
+description: "GitHub Skill 同步工具，支持本地↔云端双向同步。检测到远程版本更新时拉取，本地领先时推送。"
 ---
 
 # GitHub Skill 同步工具
 
 ## 概述
 
-自动检测并同步本地 Skill 与 GitHub 仓库中的版本。支持**双向同步**：远程优先拉取，本地领先时推送到云端。每次同步后自动维护仓库 README 版本列表。
+自动检测并同步本地 Skill 与 GitHub 仓库中的版本。支持**双向同步**：远程优先拉取，本地领先时推送到云端。
 
 ## 核心行为
 
 - **远程优先**：检测到远程 version > 本地 version 时，下载覆盖本地
-- **本地领先时**：推送到 GitHub + 自动更新 README
+- **本地领先时**：推送到 GitHub
 - **GitHub 独有 Skill**：下载到本地 Skill 目录
 - **本地独有 Skill**（MCP 相关等）：保留不动，不同步
 - **Token 验证**：每次同步前验证 token 有效性，无效则停止
-- **README 以云端为基准**：README 版本列表从 GitHub API 获取远程仓库中的 Skill 版本，不再扫描本地目录
 
 ## 版本提取铁律（v1.6 新增）
 
@@ -112,20 +111,9 @@ python scripts/push.py \
 
 > 推送路径详解（git clone vs API）→ `references/troubleshooting.md` 第二节
 
-#### 4.3 README 自动维护
-
-推送成功后才执行。使用 **scripts/readme_ops.py**：
-
-```
-python scripts/readme_ops.py \
-  --action update --owner {owner} --repo {repo} --token {token}
-```
-
-> README 维护逻辑详解 → `references/readme-logic.md`
-
 ### 第五步：报告结果
 
-展示本次同步的变更：新增、更新、推送列表，README 状态，失败项及原因。
+展示本次同步的变更：新增、更新、推送列表，失败项及原因。
 
 ## Token 更新提示
 
@@ -144,7 +132,6 @@ Token 无效时：
 | 检查版本差异 | 同步前对比 | 自动生成对比表 |
 | 拉取远程更新 | 下载新/可更新 Skill | GitHub API |
 | 推送本地 Skill | 上传可推送 Skill | scripts/push.py |
-| 维护 README | 版本变化后自动更新 | scripts/readme_ops.py |
 | Token 无效 | 提示重新配置 | 停止并提示用户 |
 | 远程版本取不到 | 先 API 目录内容确认文件名 → API base64 解码 → raw URL 兜底 | 见"版本提取铁律" |
 
@@ -154,5 +141,4 @@ Token 无效时：
 |------|------|
 | `references/sync-workflow.md` | 完整执行步骤详解（第一步~第五步）|
 | `references/version-compare.md` | 版本对比表模板 + 语义化版本比较逻辑 |
-| `references/readme-logic.md` | README 维护逻辑 + 执行命令 |
 | `references/troubleshooting.md` | 预检规则 + 推送路径对比 + 故障排查表 |
