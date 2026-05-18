@@ -1,5 +1,5 @@
 ---
-version: v2.5
+version: v2.6
 name: cross-talk-synthesis
 description: 当用户需要将多篇已有的对谈文章（不同嘉宾、不同时间但围绕同一主题）汇总为一篇以话题为轴心的交叉分析文章时触发。即使用户说"把这几篇合并一下""帮我对比一下这几期的观点""这几篇都在聊AI，帮我做个总结""汇总这些对话的核心观点，按话题整理"，也应触发。NOT for：单篇文章的格式转换、从零开始的独立研究。
 ---
@@ -73,23 +73,32 @@ glob 获取所有 `.md` 文件 → 展示列表确认。>10 篇按 BATCH-STRATEG
 汇总步骤 2 结果，按 BATCH-STRATEGY.md 模板展示话题频次、文件×话题矩阵、嘉宾多样性。邀请用户选 2-5 个话题。
 
 ### 步骤 4：深度提取（并行）
-对每个选定话题，启动 `task(general)`，**sub-agent 自读 EXTRACT-GUIDE.md 获取步骤 4 提取规范**。主 agent prompt 只传：话题名 + 相关文件列表。输出须含「塔尖候选」（见 EXTRACT-GUIDE.md 步骤 4 输出格式）。
+
+**前置（主 agent 执行）**：基于步骤 2 的文件×话题矩阵，对每个选定话题做**相关性分级**，避免 sub-agent 读入大量弱相关文件：
+- **Tier 1（强相关）**：必须全读。该文件在步骤 2 的 `topic_tags` 中直接命中当前话题关键词。
+- **Tier 2（弱相关）**：可跳过。`topic_tags` 未命中，仅因同一公司/同一领域被纳入。
+- 主 agent prompt 中只传 Tier 1 文件列表；Tier 2 文件不传。sub-agent 在提取过程中如发现信息缺口，可自行决定是否 `read` Tier 2 文件做补充。
+
+启动 `task(general)`，**sub-agent 自读 EXTRACT-GUIDE.md 获取步骤 4 提取规范**。主 agent prompt 只传：话题名 + Tier 1 文件列表。输出须含「塔尖候选」（见 EXTRACT-GUIDE.md 步骤 4 输出格式）。
 
 ### 步骤 5：分层撰写
 
 主 agent 内部判断体量（不向用户确认）：
 
-| 条件 | 模式 |
-|------|------|
-| ≤2 话题 + ≤8 文件 + 无复杂分歧 | **快速通道**（5.1） |
-| 3 话题 / 有复杂场景 | **标准模式**（5.2） |
-| ≥4 话题 | **编排模式**（5.3） |
+| 条件 | 模式 | make-report mode |
+|------|------|------------------|
+| ≤2 话题 + ≤8 文件 + 无复杂分歧 | **快速通道**（5.1） | `short` |
+| 3 话题 + 提取总行数 ≤ 400 | **标准模式**（5.2） | `short` |
+| 3 话题 + 提取总行数 > 400 | **标准模式**（5.2） | **`long`**（强制） |
+| ≥4 话题 | **编排模式**（5.3） | `subtopic`（5b） |
+
+> **提取总行数** = 步骤 4 所有深度提取文件的 wc -l 总和。步骤 4 完成后，主 agent 先 `bash wc -l` 统计行数再判断 mode。若模式判断为 `short` 但 `make-report` 超时，**禁止重试 `short`**，直接切换 `mode="long"`。
 
 #### 5.1 快速通道（≤2 话题）
 步骤 2 轻量扫描已包含 `one_liner` 和 `topic_tags`，足够支撑 2 话题。跳过步骤 4。加载 WRITING-STANDARDS.md 全文，将步骤 2 结果传入 `task(make-report, stream_to_parent=true)` 撰写。make-report agent 使用 `write` 工具写入文章文件，不得使用 shell 命令。Sub-agent 写作时 read 原文中相关段落做定向补充。
 
 #### 5.2 标准模式（3 话题）
-加载 WRITING-STANDARDS.md 全文，将步骤 4 所有提取结果传入 `task(make-report, stream_to_parent=true)` 撰写。make-report agent 使用 `write` 工具写入文章文件，不得使用 shell 命令。
+加载 WRITING-STANDARDS.md 全文，将步骤 4 所有提取结果传入 `task(make-report, stream_to_parent=true)` 撰写。**提取总行数 > 400 时必须传 `mode="long"`**（见上表）。make-report agent 使用 `write` 工具写入文章文件，不得使用 shell 命令。超时兜底：若 `short` 超时，不重试 short，直接切换 `mode="long"`。
 
 #### 5.3 编排模式（≥4 话题）
 

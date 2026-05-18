@@ -18,6 +18,8 @@
 | 文件 ≤ 10 篇 | 正常流程（步骤 2→6）| — |
 | 文件 11-30 篇 | BATCH-STRATEGY：先内容地图后选定 | general |
 | 文件 > 30 篇 | BATCH-STRATEGY：强制按子方向分组 | general |
+| 步骤 4 前做文件预筛选 | 基于步骤 2 内容地图分级：Tier 1（强相关）传 sub-agent，Tier 2 跳过 | — |
+| 标准模式选 make-report mode | `bash wc -l` 统计提取总行数，>400 行强制 `mode="long"` | make-report |
 
 ---
 
@@ -43,3 +45,5 @@
 | 🟢 注意 | 主 agent prompt 中重复内嵌提取格式 | sub-agent 自读 EXTRACT-GUIDE.md，主 agent 只传文件列表 |
 | 🟢 注意 | 快速通道场景仍执行步骤 4 | ≤2 话题 + ≤8 文件 + 无分歧时直接跳步骤 4，步骤 2 结果已够用 |
 | 🟢 注意 | sub-agent 做跨章比较或引用其他章素材 | sub-agent 仅限本章素材范围内写作，跨章 Q3 由主 agent 在 5c 完成 |
+| 🟡 重要 | 标准模式不判断提取量级，默认 short 导致超时 | 步骤 5 前 `bash wc -l` 统计提取总行数，>400 行强制 `mode="long"`；若 short 超时，禁止重试，直接切 long |
+| 🟢 注意 | 步骤 4 sub-agent 读全部文件含弱相关 | 步骤 4 前基于步骤 2 内容地图做相关性分级，只传 Tier 1 强相关文件 |
