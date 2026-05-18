@@ -16,7 +16,7 @@
 |-------|------|---------|
 | [daily-seller-hotspot](daily-seller-hotspot/) | v1.0 | 每日扫描卖方抱团方向，识别机构注意力焦点 |
 | [youtube-transcript-to-article](youtube-transcript-to-article/) | v2.2 | 视频/播客字幕自动转为书面文章 |
-| [pdf-batch-extract](pdf-batch-extract/) | v1.1 | 批量提取研报、公告PDF原文和表格为Markdown |
+| [pdf-batch-extract](pdf-batch-extract/) | v1.2 | 批量提取研报、公告PDF原文和表格为Markdown |
 
 ### 信息整理
 
