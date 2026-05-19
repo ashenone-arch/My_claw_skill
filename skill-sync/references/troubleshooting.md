@@ -51,6 +51,11 @@ PUT /repos/{owner}/{repo}/contents/{skill}/{file}           # 上传
 | HTTP 422 Unprocessable | SHA 引用失效（README 被他人更新）| 重新 GET SHA 再 PUT |
 | `req` KeyError | Python 循环内变量遮蔽 | 检查脚本中的变量名是否唯一 |
 | hash 变化检测误判 | Python sha1 对象用了 `.decode()` | 确认用 `.hexdigest()` |
+| curl pipe exit 49 / 重定向 exit 23 | Windows Git Bash 管道/文件重定向兼容性 | **禁止换姿势重试 curl**，立即改为 Python `urllib.request` 直接调用 API |
+| 下载文件全部 404 | API URL 重复拼接 `?ref=main`（`f['url']` 已自带） | 拼接前先用 `print()` 查看实际 URL 格式，不要假设 |
+| Python 脚本 exit 1 无输出 | 脚本没有 try/except + traceback | 每段脚本必须包含错误处理，`traceback.print_exc()` 输出具体错误 |
+| heredoc `<< 'EOF'` exit 1 无输出 | Windows Git Bash heredoc 兼容性差 | 用 `write` 工具写 `.py` 文件再用 Python 运行，不依赖 heredoc |
+| 临时脚本重复实现自带脚本功能 | 忽略了 Skill 已有的完整脚本 | 先检查 Skill 是否有现成脚本（如 push.py），有则直接传参运行 |
 
 ## Token 更新提示
 
