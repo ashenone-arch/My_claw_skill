@@ -1,5 +1,6 @@
 # cross-talk-synthesis 版本历史
 
+- **v2.7**：执行铁律新增第 7 条「write-only」（所有文件写入仅允许 `write` 工具，严禁 shell）；新增「文件写入铁律」专节详细说明 Windows Git Bash 中文编码陷阱（heredoc `$` 截断 / inline Python 引号错误 / PowerShell 转义）；步骤 5.2 新增文件写入兜底机制（make-report 写入失败 → 主 agent 接管，不得重试）；5.1/5.2/5b/步骤6 全部统一为加粗「仅允许使用 `write` 工具」措辞。
 - **v2.6**：步骤 4 新增文件相关性分级（Tier 1/Tier 2）减少 sub-agent 无效读取；步骤 5 新增提取量级预判机制（>400 行强制 `mode="long"` + 超时禁止重试 short）；QUICK-REF.md 新增 2 条决策速查 + 2 条陷阱。
 - **v2.5**：执行铁律新增第 6 条「中文输出」（英文 Q1 引语必须先翻译为中文再引用）；步骤 5.1/5.2/5.3(5b) 追加 `write` 工具文件写入约束，禁止 make-report agent 使用 shell 写文件；步骤 6 重写为「保存与清理」（最终文章输出至源文件文件夹，中间文件在用户确认后统一清理）；WRITING-STANDARDS.md 新增「英文引语翻译」规则；EXTRACT-GUIDE.md Q1 标注格式追加英文翻译说明。
 - **v2.4**：新增 BATCH-STRATEGY.md（大批量文件分组策略，>10 篇时触发）；大批量场景步骤 2 只提取最小信息集；内容地图模板增加话题频次、文件×话题矩阵、嘉宾多样性展示。
