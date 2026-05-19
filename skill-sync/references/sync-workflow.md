@@ -30,6 +30,8 @@
 
 ## 第二步：获取远程与本地版本对比
 
+> **v1.10 优化**：远程版本提取 + 本地版本扫描尽量用一个 Python 脚本完成，减少工具调用轮次。
+
 **远程列表**：调用 `GET /repos/{owner}/{repo}/contents`（分支=main），筛选目录类型，读取 frontmatter `version` 和 `description`。
 
 **本地列表**：扫描 `~/.alphaclaw/skills/` 下含 `SKILL.md` 的子目录，读取 frontmatter。
@@ -62,6 +64,8 @@
 ## 第四步：执行同步
 
 ### 4.1 拉取（远程 → 本地）
+
+> **v1.10 注意事项**：`f['url']` 返回的 API URL 已含 `?ref=main`，不要重复拼接；每个下载脚本必须包含 try/except + traceback。
 
 对每个"新增"和"可更新" Skill：
 
