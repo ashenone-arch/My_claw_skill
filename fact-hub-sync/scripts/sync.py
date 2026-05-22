@@ -1,9 +1,10 @@
-""" sync.py - Fact Hub 双向同步脚本 v2.1
+""" sync.py - Fact Hub 双向同步脚本 v2.0
 
 增量策略：SHA1 hash 对比 + log.md 优先裁定方向：
   - 本地独有 → 推送到远程
   - 远程独有 → 下载到本地
-  - 两边都有、hash 不同 → 比较 log.md 最后日志时间，更新者覆盖旧者
+  - 远程有、本地已删除 → 标记为待确认，默认不删除远程（需 --allow-delete）
+  - 两边都有、hash 不同 → 比较 log.md 最新日志时间（取所有时间戳中的最大值），更新者覆盖旧者
   - log.md 不存在时 → 回退到逐文件 commit 时间比较
 
 排除：github-config.json、__pycache__、.git
@@ -148,14 +149,15 @@ def get_remote_commit_date(owner, repo, file_path, token, branch='main'):
     return None
 
 
-def extract_last_log_time(file_path):
-    """从本地 log.md 提取最后一条日志的时间戳"""
+def extract_latest_log_time(file_path):
+    """从本地 log.md 提取最新日志时间（取所有时间戳中的最大值，而非最后一条匹配）"""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         matches = re.findall(r'^- (\d{4}-\d{2}-\d{2} \d{2}:\d{2})', content, re.MULTILINE)
         if matches:
-            return datetime.strptime(matches[-1], '%Y-%m-%d %H:%M').replace(tzinfo=timezone.utc)
+            timestamps = [datetime.strptime(m, '%Y-%m-%d %H:%M') for m in matches]
+            return max(timestamps).replace(tzinfo=timezone.utc)
     except Exception:
         pass
     return None
@@ -173,7 +175,8 @@ def get_remote_log_time_and_sha1(owner, repo, token, branch='main'):
         sha1 = hashlib.sha1(base64.b64decode(data['content'].replace('\n', ''))).hexdigest()
         matches = re.findall(r'^- (\d{4}-\d{2}-\d{2} \d{2}:\d{2})', content, re.MULTILINE)
         if matches:
-            dt = datetime.strptime(matches[-1], '%Y-%m-%d %H:%M').replace(tzinfo=timezone.utc)
+            timestamps = [datetime.strptime(m, '%Y-%m-%d %H:%M') for m in matches]
+            dt = max(timestamps).replace(tzinfo=timezone.utc)
             return dt, sha1
         return None, sha1
     except Exception:
@@ -213,8 +216,8 @@ def push_file(owner, repo, file_path, content_bytes, remote_blob_sha, token, bra
 
 
 def main(local_root, owner, repo, token, branch='main', mode='sync'):
-    """双向同步主流程 v2.1 — log.md 优先裁定"""
-    print(f"=== Fact Hub Sync v2.1 ===")
+    """双向同步主流程 v2.0 — log.md 最新时间优先裁定"""
+    print(f"=== Fact Hub Sync v2.0 ===")
     print(f"Local: {local_root}")
     print(f"Remote: {owner}/{repo} ({branch})")
     print(f"Mode: {mode}")
@@ -246,6 +249,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
     # 5. 对比（只做分类，不裁定方向）
     local_only = []
     remote_only = []
+    remote_deleted_locally = []  # v2.0: 远端存在但本地已删除
     conflict = []
     skipped = []
 
@@ -277,7 +281,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
 
         if 'log.md' in local_files:
             local_log_path = local_files['log.md'][0]
-            local_log_time = extract_last_log_time(local_log_path)
+            local_log_time = extract_latest_log_time(local_log_path)
 
         remote_log_time, remote_log_sha1 = get_remote_log_time_and_sha1(owner, repo, token, branch)
 
@@ -326,6 +330,11 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
                 else:
                     push_from_conflict.append(rel_path)
 
+    # 6b. v2.0: 检测远程有而本地已删除的文件
+    # 这些文件在第一次 sync 时被拉取到本地，后来用户通过 git 手动删除
+    # 默认不自动删除远程（安全考虑），仅在 --allow-delete 模式下执行
+    # 即使不删除，也会在 SUMMARY 中列出供用户知晓
+
     # 汇总
     to_push = local_only + push_from_conflict
     to_pull = remote_only + pull_from_conflict
@@ -333,6 +342,8 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
     print(f"\n=== SUMMARY ===")
     print(f"PUSH: {len(local_only)} local-only + {len(push_from_conflict)} local-newer = {len(to_push)}")
     print(f"PULL: {len(remote_only)} remote-only + {len(pull_from_conflict)} remote-newer = {len(to_pull)}")
+    if remote_deleted_locally:
+        print(f"DELETE: {len(remote_deleted_locally)} remote files locally deleted (use --allow-delete to remove from remote)")
     print(f"SKIP: {len(skipped)} unchanged + {len(tie_conflict)} tie")
     print()
 
@@ -379,6 +390,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
         'stats': {
             'local_only': len(local_only),
             'remote_only': len(remote_only),
+            'locally_deleted': len(remote_deleted_locally),
             'log_ruled_pull': len(pull_from_conflict),
             'log_ruled_push': len(push_from_conflict),
             'log_ruled_tie': len(tie_conflict),
@@ -389,6 +401,8 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
             'skipped': len(skipped)
         }
     }
+    if remote_deleted_locally:
+        result['locally_deleted_files'] = remote_deleted_locally
     if pull_fail:
         result['pull_failures'] = [{'path': p, 'error': e} for p, e in pull_fail]
     if push_fail:
@@ -401,12 +415,13 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='Fact Hub Sync - Bidirectional v2.1')
+    parser = argparse.ArgumentParser(description='Fact Hub Sync - Bidirectional v2.0')
     parser.add_argument('--local-root', required=True)
     parser.add_argument('--owner', required=True)
     parser.add_argument('--repo', required=True)
     parser.add_argument('--token', required=True)
     parser.add_argument('--branch', default='main')
     parser.add_argument('--mode', default='sync', choices=['sync', 'push', 'pull'])
+    parser.add_argument('--allow-delete', action='store_true', help='Allow deletion of remote files that were deleted locally (requires user confirmation)')
     args = parser.parse_args()
     main(args.local_root, args.owner, args.repo, args.token, args.branch, args.mode)

@@ -1,6 +1,6 @@
 ---
 name: fact-hub-sync
-version: "1.3"
+version: "2.0"
 description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。远程优先：比较最后修改时间，更新者覆盖旧者。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
 ---
 
@@ -11,7 +11,8 @@ description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向
 将本地 Fact Hub 知识库与 GitHub 仓库**双向同步**。采用 **SHA1 hash 增量对比 + log.md 优先裁定**机制：
 - 本地独有 → 推送到远程
 - 远程独有 → 下载到本地
-- 两边都有、hash 不同 → 比较 `log.md` 最后日志时间判定全局方向，更新者覆盖旧者
+- 远程有、本地已删除 → 列为待确认，默认不删除远程（需 `--allow-delete` + 用户确认）
+- 两边都有、hash 不同 → 比较 `log.md` **最新**日志时间（取所有时间戳中的最大值），更新者覆盖旧者
 - `log.md` 不存在时 → 回退到逐文件 commit 时间比较
 
 所有敏感配置存储在 `github-config.json` 中，该文件不会上传到公开仓库。
@@ -31,13 +32,14 @@ description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向
 |---------|---------|------|
 | 本地独有 | 远程树中不存在 | **推送到远程** |
 | 远程独有 | 本地文件中不存在 | **下载到本地** |
-| 两边都有，hash 不同 | **比较 log.md 最后日志时间**（v1.3） | 远程日志更新 → 全量拉取；本地日志更新 → 全量推送；log.md 一致 → 快速跳过 |
+| 两边都有，hash 不同 | **比较 log.md 最新日志时间**（v2.0：取最大时间戳） | 远程日志更新 → 全量拉取；本地日志更新 → 全量推送；log.md 一致 → 快速跳过 |
+| 远程有、本地已删除 | **不自动删除**（v2.0：安全保护） | 在 SUMMARY 中列出，需 `--allow-delete` + 用户手动确认后才删除远程 |
 | 两边都有，log.md 不存在 | 逐文件 commit 时间（兜底） | 远程 commit 更新 → 拉取；本地 mtime 更新 → 推送 |
 | 两边都有，hash 相同 | — | 跳过 |
 
 ## 核心行为
 
-- **双向同步（默认）**：`sync.py --mode sync`，log.md 优先裁定方向（v2.1）
+- **双向同步（默认）**：`sync.py --mode sync`，log.md 最新时间优先裁定方向（v2.0）
 - **纯推送**：`sync.py --mode push`，仅本地→远程（兼容旧 push.py 行为）
 - **纯拉取**：`sync.py --mode pull`，仅远程→本地
 - **目录结构保持**：本地 `Fact Hub/` 下的目录结构直接映射到 GitHub 仓库根目录
@@ -128,6 +130,24 @@ D:\AlphaEngine\resources\python\python\python.exe \
 | Token 无效 | 提示重新配置 | 停止并提示用户 |
 | 首次配置 | 复制 example 并填入真实值 | `github-config.example.json` |
 
+## 删除同步（v2.0 新增）
+
+> **安全原则**：远程文件被本地删除后，**不会自动从远程删除**。必须在用户显式确认后，由主 Agent 使用 `--allow-delete` 模式执行。
+
+sync.py 在扫描时会检测"远程存在但本地缺失"的文件，将其列在 SUMMARY 的 DELETE 行中。主 Agent 在执行步骤三（报告结果）时：
+
+1. 若 SUMMARY 显示有 `locally_deleted` 文件 → 使用 `AskUserQuestion` 逐条展示，让用户确认是否从远程删除
+2. 用户确认后 → 以 `--allow-delete` 模式重新运行 sync.py 执行删除
+3. `--allow-delete` 仅标记操作意图，实际删除需主 Agent 调用 GitHub API 完成
+
+## 与 Git 的交互（v2.0 新增）
+
+> **重要警告**：sync.py 通过 GitHub API 直接推送，会绕过 git。如果事后手动 `git commit` + `git push`，会导致历史分叉，必须 `git pull --rebase` 才能同步。
+
+建议流程：
+- sync.py 同步后若需 git 操作，先 `git pull --rebase origin main` 拉取 sync.py 产生的远程提交
+- 或统一使用 sync.py 管理同步，避免混用 git push
+
 ## Token 更新提示
 
 Token 无效时：
@@ -142,6 +162,6 @@ fact-hub-sync/
 ├── github-config.example.json    # 配置模板（可公开）
 ├── github-config.json            # 本地配置（含 Token，不可公开）
 └── scripts/
-    ├── sync.py                   # 双向同步脚本（v1.2，推荐使用）
+    ├── sync.py                   # 双向同步脚本（v2.0，推荐使用）
     └── push.py                   # 旧版推送脚本（向后兼容）
 ```

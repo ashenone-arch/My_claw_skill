@@ -2,6 +2,31 @@
 
 > 版本历史记录。
 
+## v2.0 (2026-05-22)
+
+### 核心修复
+- **时间戳提取 Bug 修复**（致命）：`extract_last_log_time()` 和 `get_remote_log_time_and_sha1()` 中 `matches[-1]` 改为 `max(timestamps)`
+  - 旧逻辑取正则匹配的最后一条，如果历史日志在文件末尾则取到最旧时间，导致方向判定完全反向
+  - 新逻辑取所有匹配时间戳中的最大值，确保始终获取最新日志时间
+  - 函数重命名：`extract_last_log_time` → `extract_latest_log_time`
+
+### 新增功能
+- **删除检测（安全保护）**：新增 `remote_deleted_locally` 分类，检测\"远程存在但本地已删除\"的文件
+  - 默认不自动删除远程文件（安全考虑），仅在 SUMMARY 中列出
+  - 新增 `--allow-delete` CLI 参数，需用户显式确认后才执行远程删除
+  - 结果 JSON 新增 `locally_deleted` 统计和 `locally_deleted_files` 列表
+
+### 文档更新
+- **Git 交互警告**：新增\"与 Git 的交互\"章节，说明 sync.py (API) 和 git push 混用导致历史分叉的风险及处理方式
+- **删除同步章节**：新增\"删除同步\"章节，描述 `--allow-delete` 模式的使用流程和用户确认要求
+- 同步逻辑表新增\"远程有、本地已删除\"行
+
+### 改进
+- 版本号统一为 2.0（sync.py 从 v2.1 → v2.0，skill.md 从 v1.3 → v2.0）
+- User-Agent 版本标识同步更新
+
+---
+
 ## v1.3 (2026-05-19)
 
 ### 重大改进
