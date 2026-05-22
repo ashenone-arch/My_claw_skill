@@ -1,6 +1,6 @@
-# 信息收集策略指南 v1.5
+# 信息收集策略指南 v2.0
 
-> 步骤 1 执行前读取。v1.5：新增 iFinD/alphaengine 交叉验证命令模板（借鉴 equity-deep-research data-commands.md）。v1.4：新增时间精度规则、数据源分工原则、数据优先级分级。
+> 步骤 1 执行前读取。v2.0：新增公司级 knowledge 补充搜索策略（通过 iFinD/alphaengine 研报等）。v1.5：新增 iFinD/alphaengine 交叉验证命令模板（借鉴 equity-deep-research data-commands.md）。
 
 ---
 
@@ -140,3 +140,34 @@ alphaengine watchlist list
 ### 并行执行铁律
 
 > 所有交叉验证的 iFinD 命令必须在同一条消息中并行发出，不得逐条串行。豁免类 fact（框架/方法论）跳过验证，不占命令数。
+
+---
+
+## 公司级 knowledge 补充搜索策略（v2.0 新增）
+
+> 当用户请求沉淀公司级知识时，除了基础事实提取，必须通过 iFinD/alphaengine 补充搜索公司深度信息。
+
+### 搜索触发条件
+
+- 用户提交涉及具体公司的材料（研报、BP、新闻、纪要等）
+- 步骤 0a 发现知识库中该公司的 knowledge.md 为空或不完整
+- 用户明确要求"研究这家公司"
+
+### 搜索流程
+
+1. **公司识别**：从用户材料中提取目标公司名称（使用 `alphaengine nlp company_extraction`）
+2. **并行检索**：在同一条消息中发起以下查询：
+   - `search_finance_reports`：搜索该公司近 3 个月研报/公司深度（report_types=["国内研报:公司研究","点评:公司点评"]）
+   - `mcporter call` iFinD stock `get_stock_financials`：获取核心财务指标
+   - `mcporter call` iFinD stock `get_stock_summary`：获取财务摘要+估值
+   - `mcporter call` iFinD news `search_news`：获取近期新闻/公告
+   - `websearch`：搜索公司近期动态（如适用）
+3. **结果整合**：将检索结果整合到已知数据包中，供步骤 3 子Agent 使用
+
+### 搜索量控制
+
+| 公司数量 | 最大检索命令数 | 说明 |
+|---------|-------------|------|
+| 1 家公司 | ≤ 8 条 | 研报 + 财务 + 新闻 + 网络搜索 |
+| 2-3 家公司 | ≤ 15 条 | 按公司分组并行查询 |
+| 4+ 家公司 | ≤ 20 条 | 优先覆盖步骤 0a 标记为 🔴/❓ 的公司 |
