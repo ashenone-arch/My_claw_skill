@@ -1,7 +1,7 @@
 ---
 name: equity-deep-research
 description: 当用户需要对A股上市公司进行深度研究、分析公司基本面、撰写投研素材时使用。触发场景包括："深度研究 XX公司"、"分析一下 XX股票"、"帮我做 XX公司的深度分析"、"XX公司值不值得研究"、"写一份 XX公司的研究报告"、"看看茅台"、"研究一下宁德时代"、"帮我做某公司的基本面分析"、"这家公司怎么样"、"出一份投研报告"。即使用户没有明确说"深度研究"，只要要求对公司做多维度基本面分析，都应触发。
-version: v2.10
+version: v2.11
 ---
 
 > 版本历史见 [CHANGELOG.md](CHANGELOG.md)
@@ -18,7 +18,7 @@ version: v2.10
 
 | # | 规则 | 说明 |
 |---|------|------|
-| 1 | **并行** | Step 2 的 13 条数据命令、Step 4b 的 3 个段簇 sub-agent，必须在同一条消息中并行发起 |
+| 1 | **并行** | Step 2 的 13 条数据命令、Step 4b 的 3 个段簇 sub-agent，必须在同一条消息中并行发起；4b 子 agent 必须通过磁盘文件（非 submit_section）交付段内容 |
 | 2 | **确认** | Step 3 预研框架 + 用户确认不允许跳过（用户说"直接出报告"例外） |
 | 3 | **溯源** | 每条结论标注三要素：证据等级（F1/F2/M1/C1/H1）+ 来源工具/文件 + 数据时间 |
 | 4 | **分工** | 编排模式下主 agent 定首席论点 + 段级论点，sub-agent 写段正文，禁止主 agent 越权写段 1-7 |
@@ -324,11 +324,11 @@ version: v2.10
 
 在同一条消息中并行发起 3 个 `task(make-report, mode="subtopic")`：
 
-| Sub-agent | prompt 内容 | 自读文件 |
-|-----------|------------|---------|
-| Sub-agent A | 簇 A 简报 | `template-datasource.md`（共3步）→ `template-cluster-A.md`（段1-4） |
-| Sub-agent B | 簇 B 简报 | `template-datasource.md`（共3步）→ `template-cluster-B.md`（段5-6） |
-| Sub-agent C | 簇 C 简报 | `template-datasource.md`（共3步）→ `template-cluster-C.md`（段7） |
+| Sub-agent | prompt 内容 | 自读文件 | 输出文件（必须） |
+|-----------|------------|---------|----------------|
+| Sub-agent A | 簇 A 简报 | `template-datasource.md`（共3步）→ `template-cluster-A.md`（段1-4） | `D:\Alphaclaw\Output\{公司名}-{代码}\_build\cluster-A.md` |
+| Sub-agent B | 簇 B 简报 | `template-datasource.md`（共3步）→ `template-cluster-B.md`（段5-6） | `D:\Alphaclaw\Output\{公司名}-{代码}\_build\cluster-B.md` |
+| Sub-agent C | 簇 C 简报 | `template-datasource.md`（共3步）→ `template-cluster-C.md`（段7） | `D:\Alphaclaw\Output\{公司名}-{代码}\_build\cluster-C.md` |
 
 Sub-agent 写作规范：
 - 不可修改主 agent 给定的段级论点（只能展开）
@@ -336,6 +336,33 @@ Sub-agent 写作规范：
 - 段内采用金字塔：论点（已给定）→ 子论点 → 数据锚点
 - 簇 A 的 sub-agent 按段 1→2→3→4 顺序写，段间加衔接标记
 - **禁止生成图片/图表/可视化**：全文仅用 markdown 原生格式（文字、表格、嵌套列表），主体内容 bullet point 驱动
+
+**🔴 强制文件交付规则（v2.11 新增）**：
+
+每个 sub-agent 完成写作后，**必须**使用 `write` 工具将完整段正文写入上表中指定的磁盘文件。主 agent 在 Step 4b 的每个 prompt 中**必须显式包含写文件指令**：
+
+```
+完成后必须用 write 工具将完整正文写入 {输出文件路径}。
+不依赖 submit_section 返回内容——4c 拼接时从磁盘文件读取。
+```
+
+**禁止**：依赖 `submit_section` 的返回内容作为 4c 的数据源——`submit_section` 仅返回摘要，不返回完整正文。
+
+**子 agent 失败处理规则（v2.11 新增）**：
+
+4b 并行执行后，主 agent 检查三个输出文件是否存在：
+
+```
+检查 D:\Alphaclaw\Output\{公司名}-{代码}\_build\cluster-{A,B,C}.md 是否成功生成
+```
+
+| 情况 | 处理 |
+|------|------|
+| 全部成功生成 | → 进入 4c |
+| 任一文件缺失或明显不完整（< 正常长度的 30%）| → **重试对应 sub-agent**（使用相同 prompt，`session_id` 传空启动全新实例），最多重试 1 次 |
+| 重试后仍失败 | → 向用户报告："段 {N} 写作两次未成功（原因：{超时/错误}）。是否：(A) 跳过该段，由我补充后交付；(B) 继续重试？" |
+
+**禁止主 agent 在子 agent 失败时自动接管写段 1-7 正文**。重试是首选项，只有用户明确选择"A"后才可由主 agent 补充。
 
 **4c：主 agent 拼接收尾**
 
@@ -385,6 +412,8 @@ D:\Alphaclaw\Output\{公司名}-{证券代码}\{yyyymmdd}-{证券代码}-{最新
 | 🔴 致命 | 可比公司 < 3 家 | 段7 至少 3 家，不足时用 `search_stocks` 补充 | 段7 无横向参照，分析缺乏锚点 |
 | 🔴 致命 | 自行估算关键数字 | 数据缺失标注 `[需补]`，段9 列出获取路径 | 幻觉数据侵蚀报告可信度 |
 | 🔴 致命 | 编排模式下主 agent 越权写段 1-7 正文 | 主 agent 只定论点 + 拼接收尾，正文由 sub-agent 写 | 并行化失效，单 agent 瓶颈依旧 |
+| 🔴 致命 | sub-agent 输出未写入磁盘文件 | 4b 的每个 sub-agent prompt 必须显式包含 write 指令 + 文件路径；4c 通过 read 磁盘文件获取内容，不依赖 submit_section 返回 | 4b→4c 数据链断裂，主 agent 拿不到段正文 |
+| 🔴 致命 | 子 agent 失败后主 agent 自动接管 | 必须重试对应 sub-agent（最多 1 次），重试仍失败则向用户确认后才可由主 agent 补充 | 并行化收益流失，且用户不知情 |
 | 🟡 重要 | 段5 纯定性描述（"行业领先""行业龙头"） | 必须引用 Beta/股权集中度/分红等 F2 级数据做量化对比 | 竞争力分析无量化支撑 |
 | 🟡 重要 | 段8 写"关注政策变化"等废话 | 必须具体到指标 + 硬触发条件（如"单季净利润 < X亿 → 下调预测"） | 跟踪指标无操作价值 |
 | 🟡 重要 | 跳过 Step 3.5 MECE 验证 | 动笔前必须完成 Step 3.5 三维检查，不得以任何理由跳过 | 逻辑链断裂未能在框架层面发现，报告返工成本极高 |
