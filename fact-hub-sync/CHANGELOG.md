@@ -2,6 +2,18 @@
 
 > 版本历史记录。
 
+## v2.1 (2026-05-29)
+
+### 性能优化
+- **Git blob SHA 对比**（核心）：冲突检测阶段从逐文件 API 调用改为本地计算 Git blob SHA 后直接与 `remote_tree` 对比
+  - `scan_local_files()` 新增 `git_blob_sha` 字段（公式：`sha1(b"blob " + len + b"\x00" + content)`）
+  - 冲突检测循环：`remote_tree[rel_path] == git_blob_sha` 替代 `get_remote_file_sha1()`
+  - N 文件 → 0 次额外 API 调用（v2.0 为 N 次 `GET /contents/{file}`）
+- 版本号统一为 2.1（sync.py docstring / print / argparse 共 4 处）
+
+### 文档更新
+- SKILL.md：概述、frontmatter version、文件清单 同步更新
+
 ## v2.0 (2026-05-22)
 
 ### 核心修复

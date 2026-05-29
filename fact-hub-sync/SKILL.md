@@ -1,14 +1,14 @@
 ---
 name: fact-hub-sync
-version: "2.0"
-description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。远程优先：比较最后修改时间，更新者覆盖旧者。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
+version: "2.1"
+description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。v2.1 采用 Git blob SHA 本地计算直接对比 remote tree，冲突检测阶段 0 API 调用。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
 ---
 
 # Fact Hub 同步工具
 
 ## 概述
 
-将本地 Fact Hub 知识库与 GitHub 仓库**双向同步**。采用 **SHA1 hash 增量对比 + log.md 优先裁定**机制：
+将本地 Fact Hub 知识库与 GitHub 仓库**双向同步**。采用 **Git blob SHA 对比（v2.1：0 API 调用）+ log.md 优先裁定**机制：
 - 本地独有 → 推送到远程
 - 远程独有 → 下载到本地
 - 远程有、本地已删除 → 列为待确认，默认不删除远程（需 `--allow-delete` + 用户确认）
@@ -162,6 +162,6 @@ fact-hub-sync/
 ├── github-config.example.json    # 配置模板（可公开）
 ├── github-config.json            # 本地配置（含 Token，不可公开）
 └── scripts/
-    ├── sync.py                   # 双向同步脚本（v2.0，推荐使用）
+    ├── sync.py                   # 双向同步脚本（v2.1，推荐使用）
     └── push.py                   # 旧版推送脚本（向后兼容）
 ```

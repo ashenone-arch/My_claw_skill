@@ -1,11 +1,14 @@
-""" sync.py - Fact Hub 双向同步脚本 v2.0
+""" sync.py - Fact Hub 双向同步脚本 v2.1
 
-增量策略：SHA1 hash 对比 + log.md 优先裁定方向：
+增量策略：Git blob SHA 对比（0 API 调用）+ log.md 优先裁定方向：
   - 本地独有 → 推送到远程
   - 远程独有 → 下载到本地
   - 远程有、本地已删除 → 标记为待确认，默认不删除远程（需 --allow-delete）
-  - 两边都有、hash 不同 → 比较 log.md 最新日志时间（取所有时间戳中的最大值），更新者覆盖旧者
+  - 两边都有、blob SHA 不同 → 比较 log.md 最新日志时间（取所有时间戳中的最大值），更新者覆盖旧者
   - log.md 不存在时 → 回退到逐文件 commit 时间比较
+
+v2.1 性能优化：冲突检测阶段改用 Git blob SHA 在本地计算后直接与 remote_tree
+对比，消除逐文件 API 调用（get_remote_file_sha1）。N 文件 → 0 次额外 API 调用。
 
 排除：github-config.json、__pycache__、.git
 """
@@ -84,7 +87,12 @@ def verify_token(token):
 
 
 def scan_local_files(local_root):
-    """返回 {rel_path: (abs_path, sha1, mtime)}"""
+    """返回 {rel_path: (abs_path, content_sha1, mtime, git_blob_sha)}
+
+    同时计算 content SHA1（用于 log.md 比对等场景）和 Git blob SHA
+    （用于与 remote_tree 直接对比，消除逐文件 API 调用）。
+    Git blob SHA = sha1(b"blob " + strlen(content) + b"\\x00" + content)
+    """
     files = {}
     for root, dirs, filenames in os.walk(local_root):
         dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__']
@@ -95,9 +103,12 @@ def scan_local_files(local_root):
             rel_path = os.path.relpath(abs_path, local_root).replace(os.sep, '/')
             with open(abs_path, 'rb') as f:
                 content = f.read()
-            sha1 = hashlib.sha1(content).hexdigest()
+            content_sha1 = hashlib.sha1(content).hexdigest()
             mtime = os.path.getmtime(abs_path)
-            files[rel_path] = (abs_path, sha1, mtime)
+            git_blob_sha = hashlib.sha1(
+                b"blob " + str(len(content)).encode('utf-8') + b"\x00" + content
+            ).hexdigest()
+            files[rel_path] = (abs_path, content_sha1, mtime, git_blob_sha)
     return files
 
 
@@ -216,8 +227,8 @@ def push_file(owner, repo, file_path, content_bytes, remote_blob_sha, token, bra
 
 
 def main(local_root, owner, repo, token, branch='main', mode='sync'):
-    """双向同步主流程 v2.0 — log.md 最新时间优先裁定"""
-    print(f"=== Fact Hub Sync v2.0 ===")
+    """双向同步主流程 v2.1 — Git blob SHA 对比 + log.md 优先裁定"""
+    print(f"=== Fact Hub Sync v2.1 ===")
     print(f"Local: {local_root}")
     print(f"Remote: {owner}/{repo} ({branch})")
     print(f"Mode: {mode}")
@@ -253,13 +264,13 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
     conflict = []
     skipped = []
 
-    for rel_path, (abs_path, local_sha1, _) in sorted(local_files.items()):
+    for rel_path, (_, _, _, git_blob_sha) in sorted(local_files.items()):
         if rel_path not in remote_tree:
             local_only.append(rel_path)
             print(f"  LOCAL: {rel_path}")
             continue
-        remote_sha1 = get_remote_file_sha1(owner, repo, rel_path, token, branch)
-        if remote_sha1 == local_sha1:
+        # remote_tree 存储的就是 Git blob SHA，本地计算后直接对比，0 次 API 调用
+        if remote_tree[rel_path] == git_blob_sha:
             skipped.append(rel_path)
         else:
             conflict.append(rel_path)
@@ -304,7 +315,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
                 print(f"  LOG: same timestamp → fallback to per-file commit time")
                 # 回退：逐文件 commit 时间比较
                 for rel_path in conflict:
-                    _, _, local_mtime = local_files[rel_path]
+                    _, _, local_mtime, _ = local_files[rel_path]
                     local_dt = datetime.fromtimestamp(local_mtime, tz=timezone.utc)
                     remote_dt = get_remote_commit_date(owner, repo, rel_path, token, branch)
                     if remote_dt is None:
@@ -320,7 +331,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
             # log.md 不存在 → 回退逐文件 commit 时间
             print(f"  LOG: unavailable → fallback to per-file commit time")
             for rel_path in conflict:
-                _, _, local_mtime = local_files[rel_path]
+                _, _, local_mtime, _ = local_files[rel_path]
                 local_dt = datetime.fromtimestamp(local_mtime, tz=timezone.utc)
                 remote_dt = get_remote_commit_date(owner, repo, rel_path, token, branch)
                 if remote_dt is None:
@@ -415,7 +426,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='Fact Hub Sync - Bidirectional v2.0')
+    parser = argparse.ArgumentParser(description='Fact Hub Sync - Bidirectional v2.1')
     parser.add_argument('--local-root', required=True)
     parser.add_argument('--owner', required=True)
     parser.add_argument('--repo', required=True)
