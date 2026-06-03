@@ -1,7 +1,8 @@
-""" readme_ops.py - README 自动维护脚本 v2.1
+""" readme_ops.py - README 自动维护脚本 v2.2
 
-功能：从 GitHub API 获取远程仓库中所有 Skill 的版本列表，更新到 GitHub README
+功能：获取远程仓库中所有 Skill 的版本列表，更新到 GitHub README
 特性：
+  - 双路径获取版本：git clone (默认识别) / GitHub API (fallback)
   - 工作流分阶段表格：按 信息收集 → 信息整理 → 分析/决策 → 系统工具 分组展示
   - 锚点保护：仅替换 <!-- SKILL_TABLE_START --> ... <!-- SKILL_TABLE_END --> 之间的表格区域
   - README 中标记外的自定义内容永久保留
@@ -15,6 +16,9 @@ import base64
 import time
 import ssl
 import urllib.request
+import subprocess
+import shutil
+import tempfile
 from collections import OrderedDict
 
 TABLE_START = '<!-- SKILL_TABLE_START -->'
@@ -150,6 +154,74 @@ def get_remote_skills(token, owner, repo):
             pass
 
     return skills
+
+
+def get_remote_skills_via_git(token, owner, repo, branch='main'):
+    """通过 git clone 获取远程仓库中所有 Skill 的版本列表（零 HTTP 请求）
+    
+    相比 API 路径，git clone 在 Windows Git Bash 下更稳定：
+    - 不依赖 Python HTTP 库 / curl 管道
+    - 不受 SSL / 编码 / exit 49 问题影响
+    - clone 完成后直接读本地文件提取版本
+    
+    失败时返回 None，调用方应 fallback 到 API 路径。
+    """
+    temp_dir = None
+    try:
+        # 创建临时目录，加随机后缀防冲突
+        temp_dir = tempfile.mkdtemp(prefix='skill-sync-')
+        
+        clone_url = f'https://{token}@github.com/{owner}/{repo}.git'
+        result = subprocess.run(
+            ['git', 'clone', '--depth', '1', '--branch', branch, clone_url, temp_dir],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode != 0:
+            return None
+        
+        skills = []
+        skip_dirs = {'README.md', '.github', 'docs', 'scripts', 'scripts_backup', '.git'}
+        
+        for entry in os.listdir(temp_dir):
+            entry_path = os.path.join(temp_dir, entry)
+            if not os.path.isdir(entry_path):
+                continue
+            if entry in skip_dirs or entry.startswith('.') or entry.startswith('mcp--'):
+                continue
+            
+            # 查找 SKILL.md（不区分大小写）
+            skill_md_path = None
+            for f in os.listdir(entry_path):
+                if f.lower() == 'skill.md':
+                    skill_md_path = os.path.join(entry_path, f)
+                    break
+            if not skill_md_path:
+                continue
+            
+            try:
+                with open(skill_md_path, 'r', encoding='utf-8') as fh:
+                    content = fh.read()
+                version, description = _parse_frontmatter(content)
+                skills.append({
+                    'name': entry,
+                    'version': version,
+                    'description': description,
+                    'sha': None  # git 路径不需要 sha
+                })
+            except Exception:
+                pass
+        
+        return skills
+        
+    except Exception:
+        return None
+    finally:
+        if temp_dir and os.path.isdir(temp_dir):
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                # Windows 下可能因文件占用删除失败，忽略
+                pass
 
 
 def generate_table_block(skills):
@@ -307,16 +379,32 @@ if __name__ == '__main__':
     parser.add_argument('--owner')
     parser.add_argument('--repo')
     parser.add_argument('--token')
+    parser.add_argument('--mode', default='api', choices=['api', 'git'],
+                        help='获取版本列表的方式: git (git clone, 推荐) / api (GitHub API, fallback)')
+    parser.add_argument('--branch', default='main')
     args = parser.parse_args()
 
+    if not all([args.owner, args.repo, args.token]):
+        print(json.dumps({'success': False, 'message': 'Missing required args'}))
+        sys.exit(1)
+
     if args.action == 'update':
-        if not all([args.owner, args.repo, args.token]):
-            print(json.dumps({'success': False, 'message': 'Missing required args'}))
-            sys.exit(1)
+        # update 操作需要写入 README，始终走 API 路径（需要 sha）
         skills = get_remote_skills(args.token, args.owner, args.repo)
         existing = get_existing_readme(args.token, args.owner, args.repo)
         content = merge_readme(existing, skills)
         success, msg = update_readme(args.token, args.owner, args.repo, content)
         print(json.dumps({'success': success, 'message': msg, 'skills_count': len(skills)}))
+    elif args.action == 'list':
+        if args.mode == 'git':
+            skills = get_remote_skills_via_git(args.token, args.owner, args.repo, args.branch)
+            if skills is not None:
+                print(json.dumps({'success': True, 'skills': skills, 'skills_count': len(skills),
+                                  'mode': 'git'}))
+                sys.exit(0)
+            # git 路径失败，fallback 到 API
+        skills = get_remote_skills(args.token, args.owner, args.repo)
+        print(json.dumps({'success': True, 'skills': skills, 'skills_count': len(skills),
+                          'mode': 'api'}))
     else:
         print(json.dumps({'success': False, 'message': f'Unknown action: {args.action}'}))

@@ -46,12 +46,15 @@ def push_git_clone(skill_name, owner, repo, token, branch='main'):
         skill_dest = os.path.join(tmp, skill_name)
         if os.path.exists(skill_dest):
             shutil.rmtree(skill_dest)
-        shutil.copytree(skill_src, skill_dest)
+        shutil.copytree(skill_src, skill_dest, ignore=shutil.ignore_patterns(
+            '__pycache__', '*.pyc', '*.pyo', 'github-config.json'
+        ))
 
-        # 排除敏感文件
-        config_file = os.path.join(skill_dest, 'github-config.json')
-        if os.path.exists(config_file):
-            os.remove(config_file)
+        # 额外检查：确保敏感文件未被复制（防御性）
+        for sensitive in ['github-config.json']:
+            sensitive_path = os.path.join(skill_dest, sensitive)
+            if os.path.exists(sensitive_path):
+                os.remove(sensitive_path)
 
         # 提交
         subprocess.run(['git', 'add', '-A'], cwd=tmp, capture_output=True)
@@ -147,8 +150,9 @@ def push_api(skill_name, owner, repo, token, branch='main'):
     import hashlib
     files = []
     for root, dirs, filenames in os.walk(skill_src):
-        if 'github-config.json' in filenames:
-            filenames.remove('github-config.json')
+        # 排除敏感文件和缓存
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        filenames[:] = [f for f in filenames if f != 'github-config.json' and not f.endswith(('.pyc', '.pyo'))]
         for fn in filenames:
             full_path = os.path.join(root, fn)
             rel_path = os.path.relpath(full_path, skill_src).replace(os.sep, '/')
