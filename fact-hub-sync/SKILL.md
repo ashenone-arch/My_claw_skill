@@ -1,21 +1,50 @@
 ---
 name: fact-hub-sync
-version: "2.1"
-description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。v2.1 采用 Git blob SHA 本地计算直接对比 remote tree，冲突检测阶段 0 API 调用。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
+version: "3.1"
+description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。v3.1 新增增量同步：通过 log.md 变更日志自动识别变更文件，仅扫描变更范围，跳过全量遍历。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
 ---
 
 # Fact Hub 同步工具
 
+## 你的角色
+
+你是 fact-hub-sync 的**操作员**，不是开发者。
+
+你的工作只有三件事：
+1. 读取配置，运行 `sync.py`（本文档列出的唯一命令）
+2. 将 sync.py 的输出结果展示给用户
+3. 在用户确认后执行同步（如有需要确认的操作）
+
+你不需要理解 sync.py 的内部实现，**不允许编写任何新代码**。
+
+## 最高优先级铁律
+
+**违反即任务失败。以下行为绝对禁止：**
+
+| 禁止行为 | 曾导致的事故 |
+|---------|------------|
+| 用 `write` 工具创建 .py / .sh 文件 | `sync.py` 已实现扫描+对比+裁定+双向同步全流程，另写脚本必然遗漏边界 case（如 hash 计算口径、时间戳取 max 而非 last） |
+| 用 `bash` 执行 `python -c "..."` 或 heredoc | Windows Git Bash 下 heredoc exit 1 无输出，连用两次全部失败，浪费 2 轮工具调用 |
+| 调用 GitHub API 自行对比文件差异 | sync.py 的 Git blob SHA 对比已做到 0 API 调用，自己写 API 调用来对比只能做到 N 次调用，又慢又不准 |
+| 跳过 sync.py 自己"写个简单的同步" | sync.py 经过 v1.3→v2.1 三次迭代修复了时间戳 bug、增加了删除保护、优化了性能，自写的脚本不会有这些保障 |
+
+**允许的操作：**
+- 读取配置文件：`read ~/.alphaclaw/skills/fact-hub-sync/github-config.json`
+- 运行 sync.py（见下方执行步骤）
+- 向用户展示结果、询问确认
+
 ## 概述
 
-将本地 Fact Hub 知识库与 GitHub 仓库**双向同步**。采用 **Git blob SHA 对比（v2.1：0 API 调用）+ log.md 优先裁定**机制：
+将本地 Fact Hub 知识库与 GitHub 仓库**双向同步**。sync.py 内部完成全部流程，你只需运行一条命令。
+
+核心机制：
 - 本地独有 → 推送到远程
 - 远程独有 → 下载到本地
-- 远程有、本地已删除 → 列为待确认，默认不删除远程（需 `--allow-delete` + 用户确认）
-- 两边都有、hash 不同 → 比较 `log.md` **最新**日志时间（取所有时间戳中的最大值），更新者覆盖旧者
-- `log.md` 不存在时 → 回退到逐文件 commit 时间比较
+- 两边都有、hash 不同 → 比较 log.md 最新日志时间裁定方向
+- 远程有、本地已删除 → 默认不删除远程（安全保护），需用户确认
+- 两边一致 → 跳过
 
-所有敏感配置存储在 `github-config.json` 中，该文件不会上传到公开仓库。
+所有敏感配置存储在 `github-config.json` 中，该文件被 `.gitignore` 保护，不会被推送到 GitHub。
 
 ## 触发条件
 
@@ -26,36 +55,13 @@ description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向
 - "sync fact hub" / "push fact hub" / "pull fact hub"
 - "把知识库推到 GitHub" / "从 GitHub 拉取知识库"
 
-## 双向同步逻辑（v1.2 新增）
-
-| 差异类型 | 判定方式 | 操作 |
-|---------|---------|------|
-| 本地独有 | 远程树中不存在 | **推送到远程** |
-| 远程独有 | 本地文件中不存在 | **下载到本地** |
-| 两边都有，hash 不同 | **比较 log.md 最新日志时间**（v2.0：取最大时间戳） | 远程日志更新 → 全量拉取；本地日志更新 → 全量推送；log.md 一致 → 快速跳过 |
-| 远程有、本地已删除 | **不自动删除**（v2.0：安全保护） | 在 SUMMARY 中列出，需 `--allow-delete` + 用户手动确认后才删除远程 |
-| 两边都有，log.md 不存在 | 逐文件 commit 时间（兜底） | 远程 commit 更新 → 拉取；本地 mtime 更新 → 推送 |
-| 两边都有，hash 相同 | — | 跳过 |
-
-## 核心行为
-
-- **双向同步（默认）**：`sync.py --mode sync`，log.md 最新时间优先裁定方向（v2.0）
-- **纯推送**：`sync.py --mode push`，仅本地→远程（兼容旧 push.py 行为）
-- **纯拉取**：`sync.py --mode pull`，仅远程→本地
-- **目录结构保持**：本地 `Fact Hub/` 下的目录结构直接映射到 GitHub 仓库根目录
-- **Token 验证**：同步前验证 token 有效性，无效则停止并提示
-
 ## 配置管理
 
-> **隐私保护**：`github-config.json` 包含 Token 等敏感信息，**不上传到公开仓库**。此文件保留在本地 `~/.alphaclaw/skills/fact-hub-sync/` 中。
+> **隐私保护**：`github-config.json` 包含 Token，已被 `.gitignore` 保护，不会上传到 GitHub。此文件保留在本地 `~/.alphaclaw/skills/fact-hub-sync/` 中。
 
-首次使用时，复制模板文件并填入真实值：
+首次使用时，复制模板：`cp github-config.example.json github-config.json`
 
-```bash
-cp github-config.example.json github-config.json
-```
-
-配置文件格式（`github-config.json`）：
+配置文件格式：
 
 ```json
 {
@@ -75,93 +81,96 @@ cp github-config.example.json github-config.json
 | `branch` | 目标分支，默认 `main` |
 | `local_root` | 本地 Fact Hub 根目录的绝对路径 |
 
-## Windows 环境注意事项（v1.1 新增）
-
-> 以下基于 Windows Git Bash 实战踩坑。
-
-| # | 规则 |
-|---|------|
-| 1 | 跑 Python 脚本用 `write` 工具写 `.py` 文件再用 Python 运行，**禁止用 bash heredoc（`<< 'EOF'`）**，heredoc 在 Git Bash 下经常 exit code 1 且无输出 |
-| 2 | **不要另写临时扫描脚本**：`sync.py` 内部已做扫描+对比+双向同步全流程，直接传参运行即可，无需自己实现 |
-| 3 | 系统内置 Python 路径为 `D:\AlphaEngine\resources\python\python\python.exe`，不要用 `python` 或 `python3` 命令 |
-
 ## 执行步骤
 
 ### 第一步：读取配置 + 环境预检
 
-1. 读取 `~/.alphaclaw/skills/fact-hub-sync/github-config.json`
-2. 验证 token 有效性（`GET /user`）
-3. 检查 `local_root` 目录是否存在
-4. 向用户确认同步目标（owner/repo/branch）
+1. `read ~/.alphaclaw/skills/fact-hub-sync/github-config.json` 获取 owner、repo、token、branch、local_root
+2. 检查 `local_root` 目录是否存在
+3. 向用户确认同步目标
 
-### 第二步：直接运行 sync.py
+### 第二步：增量变更检测
 
-> **关键**：`sync.py` 内部已完成扫描+对比+裁定+双向同步全流程。不要另写临时脚本。
+> **核心优化（v3.1）**：通过解析 log.md 中的变更日志，仅对实际变更文件做 hash 对比，跳过全量扫描。
 
-从配置文件读取参数，传入 `scripts/sync.py`（默认双向同步模式）：
+读取 `{local_root}/log.md`，从中提取变更文件列表：
+
+1. 找到最近一条以 `<!-- SYNC` 开头的同步标记行
+2. 提取该标记之后所有日志行中的 `文件:` 字段（格式：`文件: [路径1, 路径2, ...]`）
+3. 将所有路径去重，得到增量变更文件列表
+4. 若标记之后无任何日志行 → 报告"知识库无变化，跳过同步"
+5. 若 log.md 中无任何 SYNC 标记（首次增量同步）→ 回退全量模式（不传 `--files`）
+
+### 第三步：运行 sync.py
 
 ```bash
-D:\AlphaEngine\resources\python\python\python.exe \
-  "$HOME/.alphaclaw/skills/fact-hub-sync/scripts/sync.py" \
+python "$HOME/.alphaclaw/skills/fact-hub-sync/scripts/sync.py" \
   --local-root "<local_root>" \
   --owner "<repo_owner>" \
   --repo "<repo_name>" \
   --token "<token>" \
   --branch main \
-  --mode sync
+  --mode sync \
+  --files "科技-AI/facts.md,科技-AI/opinions.md,..."
 ```
 
-> `--mode` 可选 `sync`（默认，双向）、`push`（仅推送）、`pull`（仅拉取）。
+> `--files` 参数为第二步提取的变更文件列表（逗号分隔）。sync.py 仅扫描这些文件 + log.md，其余文件假定与远程一致。
 
-脚本输出包含：差异分类（LOCAL/REMOTE/CONFLICT）、每个冲突文件的时间裁定结果、拉取/推送执行状态、最终 JSON 汇总。
+参数说明：
+- `--mode sync`（默认）：双向同步，log.md 裁定冲突方向
+- `--mode push`：仅本地 → 远程
+- `--mode pull`：仅远程 → 本地
+- `--files`：增量模式，仅扫描指定文件
 
-### 第三步：报告结果
+### 第四步：报告结果 + 追加同步标记
 
-从 sync.py 输出的 JSON 汇总中提取：拉取/推送成功失败数、冲突裁定明细、变更文件清单。
+从 sync.py 输出的 JSON 汇总中提取结果。
 
-## 快速参考
+同步成功后，向 `{local_root}/log.md` 追加同步标记：
 
-| 场景 | 操作 | 工具/脚本 |
-|------|------|---------|
-| 双向同步 Fact Hub | 自动裁定差异方向 | `scripts/sync.py --mode sync` |
-| 仅推送到远程 | 本地→云端 | `scripts/sync.py --mode push` |
-| 仅拉取到本地 | 云端→本地 | `scripts/sync.py --mode pull` |
-| 检查差异 | 对比本地/远程 SHA1 hash | GitHub API |
-| Token 无效 | 提示重新配置 | 停止并提示用户 |
-| 首次配置 | 复制 example 并填入真实值 | `github-config.example.json` |
+```
+<!-- SYNC 2026-06-03 14:30 | push: 3, pull: 0 -->
+```
 
-## 删除同步（v2.0 新增）
+> 此标记作为下次增量同步的起点。下次 sync 只需读取此标记之后的日志行。
 
-> **安全原则**：远程文件被本地删除后，**不会自动从远程删除**。必须在用户显式确认后，由主 Agent 使用 `--allow-delete` 模式执行。
+## 退出前自检
 
-sync.py 在扫描时会检测"远程存在但本地缺失"的文件，将其列在 SUMMARY 的 DELETE 行中。主 Agent 在执行步骤三（报告结果）时：
+在向用户报告结果之前，必须完成：
 
-1. 若 SUMMARY 显示有 `locally_deleted` 文件 → 使用 `AskUserQuestion` 逐条展示，让用户确认是否从远程删除
-2. 用户确认后 → 以 `--allow-delete` 模式重新运行 sync.py 执行删除
-3. `--allow-delete` 仅标记操作意图，实际删除需主 Agent 调用 GitHub API 完成
+1. 本次任务中是否用 `write` 创建了 .py/.sh 文件？→ 是则**任务失败**。删除文件，重新按流程执行。
+2. 是否使用了 `python -c "..."` 或 heredoc？→ 是则**任务失败**。
+3. 是否自行调用了 GitHub API 而非运行 sync.py？→ 是则**任务失败**。sync.py 已完成所有 API 调用。
 
-## 与 Git 的交互（v2.0 新增）
+全部通过后，正常报告结果。
 
-> **重要警告**：sync.py 通过 GitHub API 直接推送，会绕过 git。如果事后手动 `git commit` + `git push`，会导致历史分叉，必须 `git pull --rebase` 才能同步。
+## Token 无效处理
 
-建议流程：
-- sync.py 同步后若需 git 操作，先 `git pull --rebase origin main` 拉取 sync.py 产生的远程提交
-- 或统一使用 sync.py 管理同步，避免混用 git push
-
-## Token 更新提示
-
-Token 无效时：
+检测到 GitHub token 无效时停止，提示：
 
 > 检测到 GitHub token 无效（已过期或被撤销）。请访问 https://github.com/settings/tokens 重新生成（需勾选 `repo` 权限），然后将新 token 告诉我，我会更新本地配置文件。
+
+## 踩坑日志
+
+以下事故均因 AI 不遵守规则导致：
+
+| 事故 | 原因 | 教训 |
+|------|------|------|
+| heredoc 连续失败 | Git Bash 下 heredoc exit 1 无输出，AI 连用两次全部失败 | 用 `write` 写文件再 Python 运行，不用 heredoc |
+| 重复实现 sync.py | AI 另写临时扫描脚本，重复实现 sync.py 已有功能，浪费 2 轮工具调用 | sync.py 已做全流程，直接传参运行 |
+| 时间戳取最后一条导致方向反向 | 旧版用 `matches[-1]` 取最后匹配，历史日志在末尾时取到最旧时间 | 已修复为 `max(timestamps)`，取最新时间 |
+| git push 与 sync.py 混用导致分叉 | sync.py 通过 API 直接推送绕过 git，事后手动 git push 导致历史分叉 | 统一用 sync.py 管理同步，避免混用 git push |
 
 ## 文件清单
 
 ```
 fact-hub-sync/
-├── SKILL.md                      # 本文件（Skill 定义）
-├── github-config.example.json    # 配置模板（可公开）
-├── github-config.json            # 本地配置（含 Token，不可公开）
+├── SKILL.md                   # 本文件
+├── .gitignore                 # 排除 github-config.json + __pycache__
+├── github-config.example.json # 配置模板（可公开）
+├── github-config.json         # 本地配置（含 Token，不可公开）
+├── CHANGELOG.md               # 版本历史
 └── scripts/
-    ├── sync.py                   # 双向同步脚本（v2.1，推荐使用）
-    └── push.py                   # 旧版推送脚本（向后兼容）
+    ├── sync.py                # 双向同步脚本（v2.1，推荐）
+    └── push.py                # 旧版推送脚本（向后兼容）
 ```

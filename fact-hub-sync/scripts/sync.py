@@ -86,13 +86,17 @@ def verify_token(token):
         return False, str(e)
 
 
-def scan_local_files(local_root):
+def scan_local_files(local_root, filter_files=None):
     """返回 {rel_path: (abs_path, content_sha1, mtime, git_blob_sha)}
 
     同时计算 content SHA1（用于 log.md 比对等场景）和 Git blob SHA
     （用于与 remote_tree 直接对比，消除逐文件 API 调用）。
     Git blob SHA = sha1(b"blob " + strlen(content) + b"\\x00" + content)
+
+    若 filter_files 非空，仅扫描列表中的文件（+ log.md 和 README.md），
+    其余文件假定与远程一致跳过。用于增量同步场景。
     """
+    always_include = {'log.md', 'README.md'}
     files = {}
     for root, dirs, filenames in os.walk(local_root):
         dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__']
@@ -101,6 +105,9 @@ def scan_local_files(local_root):
                 continue
             abs_path = os.path.join(root, fn)
             rel_path = os.path.relpath(abs_path, local_root).replace(os.sep, '/')
+            # 增量模式：只扫描指定文件 + 始终需要的关键文件
+            if filter_files is not None and rel_path not in filter_files and rel_path not in always_include:
+                continue
             with open(abs_path, 'rb') as f:
                 content = f.read()
             content_sha1 = hashlib.sha1(content).hexdigest()
@@ -226,12 +233,14 @@ def push_file(owner, repo, file_path, content_bytes, remote_blob_sha, token, bra
     return api_put(f'{base_url}/contents/{encoded_path}', token, payload)
 
 
-def main(local_root, owner, repo, token, branch='main', mode='sync'):
+def main(local_root, owner, repo, token, branch='main', mode='sync', filter_files=None):
     """双向同步主流程 v2.1 — Git blob SHA 对比 + log.md 优先裁定"""
     print(f"=== Fact Hub Sync v2.1 ===")
     print(f"Local: {local_root}")
     print(f"Remote: {owner}/{repo} ({branch})")
     print(f"Mode: {mode}")
+    if filter_files:
+        print(f"Incremental: only scanning {len(filter_files)} files + log.md, README.md")
     print()
 
     # 1. 验证 token
@@ -247,8 +256,8 @@ def main(local_root, owner, repo, token, branch='main', mode='sync'):
         return
     print(f"Local root OK")
 
-    # 3. 扫描本地
-    local_files = scan_local_files(local_root)
+    # 3. 扫描本地（增量模式下仅扫描变更文件）
+    local_files = scan_local_files(local_root, filter_files)
     print(f"Local files: {len(local_files)}")
 
     # 4. 获取远程树
@@ -434,5 +443,7 @@ if __name__ == '__main__':
     parser.add_argument('--branch', default='main')
     parser.add_argument('--mode', default='sync', choices=['sync', 'push', 'pull'])
     parser.add_argument('--allow-delete', action='store_true', help='Allow deletion of remote files that were deleted locally (requires user confirmation)')
+    parser.add_argument('--files', default=None, help='Comma-separated list of changed file paths for incremental sync (skips full scan of unchanged files)')
     args = parser.parse_args()
-    main(args.local_root, args.owner, args.repo, args.token, args.branch, args.mode)
+    filter_files = [f.strip() for f in args.files.split(',') if f.strip()] if args.files else None
+    main(args.local_root, args.owner, args.repo, args.token, args.branch, args.mode, filter_files)
