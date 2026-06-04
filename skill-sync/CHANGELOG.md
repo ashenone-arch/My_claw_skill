@@ -2,6 +2,21 @@
 
 > 版本历史记录。
 
+## v2.2 (2026-06-04)
+
+### Added
+- SKILL.md 第一步新增步骤 2：操作员从当前对话的 `<system-reminder>` 中提取 Python 绝对路径，记为 `{PYTHON}` 占位符
+
+### Changed
+- 所有可执行命令中的 `python` 替换为 `{PYTHON}`（共 7 处）：脚本索引表、第二步 readme_ops、第四步拉取、第四步推送、退出前自检
+- 描述中引用的 `python -c` 同步替换为 `{PYTHON} -c`
+
+### Rationale
+- v2.1 虽然用 git clone 路径避开了 readme_ops.py 的 HTTP 问题，但 `python` 命令本身在 Git Bash 下解析不稳定（MSYS2 路径转换 / DLL 不兼容），`readme_ops.py` 和 `push.py` 仍会偶发 exit 49
+- 方案：`{PYTHON}` 是占位符，不写入文件；操作员加载 skill 时从 `<system-reminder>` 动态提取当前环境的 Python 绝对路径后填充执行。零隐私泄露（绝对路径从未存入 skill 文件，不会被推送到 GitHub），零维护负担（系统自动注入，换环境自动适配）
+
+---
+
 ## v2.1 (2026-06-03)
 
 ### Added

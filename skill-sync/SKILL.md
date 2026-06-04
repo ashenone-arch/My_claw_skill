@@ -1,7 +1,7 @@
 ---
 name: skill-sync
-version: "2.1"
-description: "GitHub Skill 同步工具，支持本地↔云端双向同步。v2.1 增加 git clone 路径获取版本列表（零 HTTP），避免 Windows Git Bash 下 curl/管道 exit 49 问题。检测到远程版本更新时拉取，本地领先时推送。"
+version: "2.2"
+description: "GitHub Skill 同步工具，支持本地↔云端双向同步。v2.2 自动从系统环境提取 Python 绝对路径，彻底解决 Git Bash 下 exit 49 问题。检测到远程版本更新时拉取，本地领先时推送。"
 ---
 
 # GitHub Skill 同步工具
@@ -38,8 +38,8 @@ description: "GitHub Skill 同步工具，支持本地↔云端双向同步。v2
 
 | 脚本 | 用途 | CLI 命令 |
 |------|------|---------|
-| `scripts/push.py` | 推送 Skill 到 GitHub（含预检、git clone/API 双路径自动切换、推送后验证、README 更新） | `python scripts/push.py --skill {name} --owner {o} --repo {r} --token {t}` |
-| `scripts/readme_ops.py` | 列出远程 Skill 版本 / 更新 README 版本表 | `python scripts/readme_ops.py --action list --mode git --owner {o} --repo {r} --token {t}` |
+| `scripts/push.py` | 推送 Skill 到 GitHub（含预检、git clone/API 双路径自动切换、推送后验证、README 更新） | `{PYTHON} scripts/push.py --skill {name} --owner {o} --repo {r} --token {t}` |
+| `scripts/readme_ops.py` | 列出远程 Skill 版本 / 更新 README 版本表 | `{PYTHON} scripts/readme_ops.py --action list --mode git --owner {o} --repo {r} --token {t}` |
 
 ## 概述
 
@@ -80,7 +80,8 @@ description: "GitHub Skill 同步工具，支持本地↔云端双向同步。v2
 ### 第一步：读取配置 + 环境预检
 
 1. 读取 `~/.alphaclaw/skills/skill-sync/github-config.json` 获取 owner、repo、token、branch
-2. 运行预检命令：
+2. 从当前对话的 `<system-reminder>` 标签中提取 Python 绝对路径（查找 `Python:` 行，取后续的完整路径），记为 `{PYTHON}`。后续所有脚本和 Python 命令都必须用 `{PYTHON}` 替代裸 `python`。
+3. 运行预检命令：
 
 ```bash
 git --version
@@ -99,7 +100,7 @@ curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer {token}" https:
 运行：
 
 ```bash
-python scripts/readme_ops.py --action list --mode git --owner {o} --repo {r} --token {t}
+{PYTHON} scripts/readme_ops.py --action list --mode git --owner {o} --repo {r} --token {t}
 ```
 
 获得远程 Skill 版本列表（JSON 格式）。同时扫描本地 `~/.alphaclaw/skills/` 下含 `SKILL.md` 的子目录，读取 frontmatter 中的 `version`。
@@ -130,17 +131,17 @@ python scripts/readme_ops.py --action list --mode git --owner {o} --repo {r} --t
 对每个"新增"和"可更新" Skill，用 curl 从 GitHub Contents API 下载文件到本地。每个文件一条命令：
 
 ```bash
-curl -s -H "Authorization: Bearer {token}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/{owner}/{repo}/contents/{skill}/{file}?ref={branch}" | python -c "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['content']).decode(), end='')" > ~/.alphaclaw/skills/{skill}/{file}
+curl -s -H "Authorization: Bearer {token}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/{owner}/{repo}/contents/{skill}/{file}?ref={branch}" | {PYTHON} -c "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['content']).decode(), end='')" > ~/.alphaclaw/skills/{skill}/{file}
 ```
 
-> 注意：`python -c` 在此处是管道消费端的必要操作，属于本文档明确列出的命令，不是自由发挥。不要扩展到其他场景。
+> 注意：`{PYTHON} -c` 在此处是管道消费端的必要操作，属于本文档明确列出的命令，不是自由发挥。不要扩展到其他场景。
 
 #### 4.2 推送（本地 → 远程）
 
 对每个"可推送" Skill：
 
 ```bash
-python scripts/push.py --skill {skill-name} --owner {owner} --repo {repo} --token {token} --branch main
+{PYTHON} scripts/push.py --skill {skill-name} --owner {owner} --repo {repo} --token {token} --branch main
 ```
 
 `push.py` 内部已完成全部流程（预检 → 路径选择 → 推送 → 验证），直接运行即可，无需额外操作。
@@ -154,7 +155,7 @@ python scripts/push.py --skill {skill-name} --owner {owner} --repo {repo} --toke
 在向用户报告结果之前，必须完成：
 
 1. 本次任务中是否用 `write` 创建了 .py/.sh 文件？→ 是则**任务失败**，删除文件，重新按流程执行。
-2. 是否使用了本文档未列出的 `python -c "..."` 或 heredoc？→ 是则**任务失败**。
+2. 是否使用了本文档未列出的 `{PYTHON} -c "..."` 或 heredoc？→ 是则**任务失败**。
 3. 是否"简化"为自写脚本来绕过已有脚本？→ 是则**任务失败**。已有脚本经过完整测试，自写的会遗漏边界 case。
 
 全部通过后，正常报告结果。
