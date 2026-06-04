@@ -2,6 +2,21 @@
 
 > 版本历史记录。
 
+## v3.2 (2026-06-04)
+
+### Added
+- SKILL.md 第一步新增步骤 2：操作员从当前对话的 `<system-reminder>` 中提取 Python 绝对路径，记为 `{PYTHON}` 占位符
+
+### Changed
+- 第三步 sync.py 调用命令中 `python` 替换为 `{PYTHON}`
+- 退出前自检中 `python -c "..."` 替换为 `{PYTHON} -c "..."`
+
+### Rationale
+- 与 skill-sync v2.2 同源问题：`python` 命令在 Windows Git Bash 下解析不稳定（MSYS2 路径转换 / DLL 不兼容），sync.py 偶发 exit 49
+- 方案：`{PYTHON}` 占位符 + `<system-reminder>` 动态注入，零隐私泄露、零维护负担
+
+---
+
 ## v3.1 (2026-06-03)
 
 ### 新增：log.md 驱动的增量同步

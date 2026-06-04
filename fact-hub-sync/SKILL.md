@@ -1,7 +1,7 @@
 ---
 name: fact-hub-sync
-version: "3.1"
-description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。v3.1 新增增量同步：通过 log.md 变更日志自动识别变更文件，仅扫描变更范围，跳过全量遍历。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
+version: "3.2"
+description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。v3.2 自动从系统环境提取 Python 绝对路径，彻底解决 Git Bash 下 exit 49 问题。v3.1 新增增量同步：通过 log.md 变更日志自动识别变更文件，仅扫描变更范围。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
 ---
 
 # Fact Hub 同步工具
@@ -86,8 +86,9 @@ description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向
 ### 第一步：读取配置 + 环境预检
 
 1. `read ~/.alphaclaw/skills/fact-hub-sync/github-config.json` 获取 owner、repo、token、branch、local_root
-2. 检查 `local_root` 目录是否存在
-3. 向用户确认同步目标
+2. 从当前对话的 `<system-reminder>` 标签中提取 Python 绝对路径（查找 `Python:` 行，取后续的完整路径），记为 `{PYTHON}`。后续所有脚本和 Python 命令都必须用 `{PYTHON}` 替代裸 `python`。
+3. 检查 `local_root` 目录是否存在
+4. 向用户确认同步目标
 
 ### 第二步：增量变更检测
 
@@ -104,7 +105,7 @@ description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向
 ### 第三步：运行 sync.py
 
 ```bash
-python "$HOME/.alphaclaw/skills/fact-hub-sync/scripts/sync.py" \
+{PYTHON} "$HOME/.alphaclaw/skills/fact-hub-sync/scripts/sync.py" \
   --local-root "<local_root>" \
   --owner "<repo_owner>" \
   --repo "<repo_name>" \
@@ -139,7 +140,7 @@ python "$HOME/.alphaclaw/skills/fact-hub-sync/scripts/sync.py" \
 在向用户报告结果之前，必须完成：
 
 1. 本次任务中是否用 `write` 创建了 .py/.sh 文件？→ 是则**任务失败**。删除文件，重新按流程执行。
-2. 是否使用了 `python -c "..."` 或 heredoc？→ 是则**任务失败**。
+2. 是否使用了 `{PYTHON} -c "..."` 或 heredoc？→ 是则**任务失败**。
 3. 是否自行调用了 GitHub API 而非运行 sync.py？→ 是则**任务失败**。sync.py 已完成所有 API 调用。
 
 全部通过后，正常报告结果。
