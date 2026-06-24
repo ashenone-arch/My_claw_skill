@@ -1,6 +1,9 @@
 # 敏感配置（含 GitHub Token，绝对禁止上传）
 github-config.json
 
+# 同步状态快照（每终端独立维护，不参与同步）
+.syncstate.json
+
 # Python 缓存
 __pycache__/
 *.pyc

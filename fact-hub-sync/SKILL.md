@@ -1,7 +1,7 @@
 ---
 name: fact-hub-sync
-version: "3.2"
-description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。v3.2 自动从系统环境提取 Python 绝对路径，彻底解决 Git Bash 下 exit 49 问题。v3.1 新增增量同步：通过 log.md 变更日志自动识别变更文件，仅扫描变更范围。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
+version: "3.3"
+description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向同步。v3.3 新增 .syncstate.json 远程变更哨兵机制，解决多终端并行同步时增量检测漏同步问题。v3.2 自动从系统环境提取 Python 绝对路径。支持 sync/push/pull 三种模式。配置通过本地 github-config.json 管理，不上传公开仓库。"
 ---
 
 # Fact Hub 同步工具
@@ -90,19 +90,9 @@ description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向
 3. 检查 `local_root` 目录是否存在
 4. 向用户确认同步目标
 
-### 第二步：增量变更检测
+### 第二步：运行 sync.py（增量自动处理）
 
-> **核心优化（v3.1）**：通过解析 log.md 中的变更日志，仅对实际变更文件做 hash 对比，跳过全量扫描。
-
-读取 `{local_root}/log.md`，从中提取变更文件列表：
-
-1. 找到最近一条以 `<!-- SYNC` 开头的同步标记行
-2. 提取该标记之后所有日志行中的 `文件:` 字段（格式：`文件: [路径1, 路径2, ...]`）
-3. 将所有路径去重，得到增量变更文件列表
-4. 若标记之后无任何日志行 → 报告"知识库无变化，跳过同步"
-5. 若 log.md 中无任何 SYNC 标记（首次增量同步）→ 回退全量模式（不传 `--files`）
-
-### 第三步：运行 sync.py
+sync.py 内部自动完成增量检测——通过 `.syncstate.json` 判断远程是否有变更，通过 log.md 识别本地变更文件。你只需传基础参数，无需手动提取文件列表。
 
 ```bash
 {PYTHON} "$HOME/.alphaclaw/skills/fact-hub-sync/scripts/sync.py" \
@@ -111,29 +101,20 @@ description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向
   --repo "<repo_name>" \
   --token "<token>" \
   --branch main \
-  --mode sync \
-  --files "科技-AI/facts.md,科技-AI/opinions.md,..."
+  --mode sync
 ```
-
-> `--files` 参数为第二步提取的变更文件列表（逗号分隔）。sync.py 仅扫描这些文件 + log.md，其余文件假定与远程一致。
 
 参数说明：
 - `--mode sync`（默认）：双向同步，log.md 裁定冲突方向
 - `--mode push`：仅本地 → 远程
 - `--mode pull`：仅远程 → 本地
-- `--files`：增量模式，仅扫描指定文件
+- `--files`（可选）：逗号分隔的本地变更文件列表。sync.py 仅在本地变更检查阶段使用此列表（跳过明确没变的文件），远程变更检测由 `.syncstate.json` 独立完成。不传此参数时回退全量扫描。
 
-### 第四步：报告结果 + 追加同步标记
+> **增量原理（v3.3）**：sync.py 读取知识库根目录的 `.syncstate.json`（上次同步时的远程 tree SHA + 文件 blob SHA 快照），与当前远程 tree SHA 对比。若远程 tree SHA 未变 → 仅扫描本地变更文件；若远程 tree SHA 变化 → 自动从快照中 diff 出远程变更文件加入扫描列表。两终端场景下，终端B 的 sync 会检测到终端A 推送导致的 tree SHA 变化并精准拉取差异文件。
 
-从 sync.py 输出的 JSON 汇总中提取结果。
+### 第三步：报告结果
 
-同步成功后，向 `{local_root}/log.md` 追加同步标记：
-
-```
-<!-- SYNC 2026-06-03 14:30 | push: 3, pull: 0 -->
-```
-
-> 此标记作为下次增量同步的起点。下次 sync 只需读取此标记之后的日志行。
+从 sync.py 输出的 JSON 汇总中提取结果，展示给用户。sync.py 会在同步成功后自动更新 `.syncstate.json`，无需手动追加任何标记。
 
 ## 退出前自检
 
@@ -161,17 +142,18 @@ description: "Fact Hub 知识库双向同步工具，支持本地↔云端双向
 | 重复实现 sync.py | AI 另写临时扫描脚本，重复实现 sync.py 已有功能，浪费 2 轮工具调用 | sync.py 已做全流程，直接传参运行 |
 | 时间戳取最后一条导致方向反向 | 旧版用 `matches[-1]` 取最后匹配，历史日志在末尾时取到最旧时间 | 已修复为 `max(timestamps)`，取最新时间 |
 | git push 与 sync.py 混用导致分叉 | sync.py 通过 API 直接推送绕过 git，事后手动 git push 导致历史分叉 | 统一用 sync.py 管理同步，避免混用 git push |
+| 多终端增量漏同步（v3.1 致命缺陷） | v3.1 增量仅依赖本地 log.md 提取变更文件，终端A 的变更记录不在终端B 的 log.md 中，导致终端B sync 时远程文件被"假定一致跳过"而漏拉取 | v3.3 新增 .syncstate.json 远程 tree SHA 哨兵 + 文件 blob 快照 diff，两终端并行同步时自动检测远程变更 |
 
 ## 文件清单
 
 ```
 fact-hub-sync/
 ├── SKILL.md                   # 本文件
-├── .gitignore                 # 排除 github-config.json + __pycache__
+├── .gitignore                 # 排除 github-config.json + .syncstate.json + __pycache__
 ├── github-config.example.json # 配置模板（可公开）
 ├── github-config.json         # 本地配置（含 Token，不可公开）
 ├── CHANGELOG.md               # 版本历史
 └── scripts/
-    ├── sync.py                # 双向同步脚本（v2.1，推荐）
+    ├── sync.py                # 双向同步脚本（v2.2，推荐）
     └── push.py                # 旧版推送脚本（向后兼容）
 ```

@@ -2,6 +2,47 @@
 
 > 版本历史记录。
 
+## v3.3 (2026-06-24)
+
+### 核心修复：多终端并行同步漏同步（致命缺陷）
+
+v3.1 的增量机制仅依赖本地 log.md 提取变更文件列表，这在多终端场景下失效：
+终端A 的变更记录不在终端B 的 log.md 中，导致终端B sync 时远程文件被"假定一致跳过"。
+
+### 新增：.syncstate.json 远程变更哨兵
+
+- **`load_syncstate()`**：读取同步状态快照（上次同步时的远程 tree SHA + 所有文件 blob SHA）
+- **`save_syncstate()`**：同步成功后保存新快照
+- **`diff_remote_vs_snapshot()`**：对比当前 remote_tree vs 快照，精准定位远程变更文件
+- **`get_remote_tree()` 返回值扩展**：从 `(dict, error)` → `(dict, tree_sha, error)`
+
+### 增量逻辑改进
+
+```
+sync.py v3.3:
+  1. load_syncstate() → 获取上次 tree SHA
+  2. get_remote_tree() → 获取当前 tree SHA
+  3. 若 tree SHA 未变 → 远程无变更，维持现有增量
+  4. 若 tree SHA 变化 → diff_remote_vs_snapshot() → 找出远程变更文件 → 加入扫描列表
+  5. 扫描完成后 save_syncstate()
+```
+
+### Changed
+
+- **sync.py v2.1 → v2.2**：User-Agent 版本号同步更新
+- **SKILL.md v3.2 → v3.3**：执行步骤从 4 步简化为 3 步（去掉手动 log.md 解析和 SYNC 标记追加）
+- **.gitignore**：新增 `.syncstate.json` 排除规则
+- **CHANGELOG.md**：新增 v3.3 条目
+
+### Rationale
+
+- v3.1 增量设计假定单终端操作，log.md 作为"同步状态"在两终端场景下不可靠
+- GitHub tree SHA 是仓库文件树的内容哈希——任何文件变更都触发 tree SHA 变化
+- 用 tree SHA 做"远程是否有变更"的哨兵，快照 diff 精准定位变更文件，零额外 API 调用
+- 远程 tree SHA 不变的场景（>95%）维持零额外成本
+
+---
+
 ## v3.2 (2026-06-04)
 
 ### Added

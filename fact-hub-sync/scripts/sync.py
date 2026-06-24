@@ -1,4 +1,4 @@
-""" sync.py - Fact Hub 双向同步脚本 v2.1
+""" sync.py - Fact Hub 双向同步脚本 v2.2
 
 增量策略：Git blob SHA 对比（0 API 调用）+ log.md 优先裁定方向：
   - 本地独有 → 推送到远程
@@ -7,10 +7,14 @@
   - 两边都有、blob SHA 不同 → 比较 log.md 最新日志时间（取所有时间戳中的最大值），更新者覆盖旧者
   - log.md 不存在时 → 回退到逐文件 commit 时间比较
 
+v2.2 (2026-06-24): 新增 .syncstate.json 远程变更哨兵机制，解决多终端并行同步场景下
+增量检测漏同步问题。每次 sync 后保存远程 tree SHA + 本地 blob SHA 快照；下次 sync 时
+若远程 tree SHA 未变则维持现有效率，若变化则从快照精准定位远程变更文件加入扫描列表。
+
 v2.1 性能优化：冲突检测阶段改用 Git blob SHA 在本地计算后直接与 remote_tree
 对比，消除逐文件 API 调用（get_remote_file_sha1）。N 文件 → 0 次额外 API 调用。
 
-排除：github-config.json、__pycache__、.git
+排除：github-config.json、__pycache__、.git、.syncstate.json
 """
 import sys
 import os
@@ -24,6 +28,9 @@ import urllib.error
 from urllib.parse import quote
 from datetime import datetime, timezone
 
+# ── 同步状态文件路径 ──────────────────────────────────
+SYNCSTATE_FILE = '.syncstate.json'
+
 # ── SSL 上下文（多级降级） ──────────────────────────────────
 def build_ssl_ctx():
     for opts in [
@@ -35,7 +42,7 @@ def build_ssl_ctx():
             opts.verify_mode = ssl.CERT_NONE
             test_req = urllib.request.Request(
                 'https://api.github.com/zen',
-                headers={'User-Agent': 'AlphaClaw-FactHubSync/2.1'}
+                headers={'User-Agent': 'AlphaClaw-FactHubSync/2.2'}
             )
             urllib.request.urlopen(test_req, timeout=5, context=opts)
             return opts
@@ -50,7 +57,7 @@ def api_get(url, token):
     req = urllib.request.Request(url)
     req.add_header('Authorization', f'Bearer {token}')
     req.add_header('Accept', 'application/vnd.github.v3+json')
-    req.add_header('User-Agent', 'AlphaClaw-FactHubSync/2.1')
+    req.add_header('User-Agent', 'AlphaClaw-FactHubSync/2.2')
     kw = {'timeout': 30}
     if _CTX:
         kw['context'] = _CTX
@@ -63,7 +70,7 @@ def api_put(url, token, payload):
     req = urllib.request.Request(url, data=data)
     req.add_header('Authorization', f'Bearer {token}')
     req.add_header('Content-Type', 'application/json')
-    req.add_header('User-Agent', 'AlphaClaw-FactHubSync/2.1')
+    req.add_header('User-Agent', 'AlphaClaw-FactHubSync/2.2')
     req.get_method = lambda: 'PUT'
     kw = {'timeout': 30}
     if _CTX:
@@ -120,7 +127,7 @@ def scan_local_files(local_root, filter_files=None):
 
 
 def get_remote_tree(owner, repo, token, branch='main'):
-    """获取远程仓库文件树，返回 {path: blob_sha}"""
+    """获取远程仓库文件树，返回 ({path: blob_sha}, tree_sha|None, error|None)"""
     base_url = f'https://api.github.com/repos/{owner}/{repo}'
     try:
         branch_data = api_get(f'{base_url}/branches/{branch}', token)
@@ -130,9 +137,9 @@ def get_remote_tree(owner, repo, token, branch='main'):
         for item in tree_data.get('tree', []):
             if item.get('type') == 'blob':
                 result[item['path']] = item.get('sha', '')
-        return result, None
+        return result, tree_sha, None
     except Exception as e:
-        return {}, str(e)
+        return {}, None, str(e)
 
 
 def get_remote_file_sha1(owner, repo, file_path, token, branch='main'):
@@ -202,6 +209,50 @@ def get_remote_log_time_and_sha1(owner, repo, token, branch='main'):
     return None, None
 
 
+# ── .syncstate.json 操作 ──────────────────────────────────
+
+def load_syncstate(local_root):
+    """读取同步状态快照。返回 dict 或 None（文件不存在/损坏）。"""
+    path = os.path.join(local_root, SYNCSTATE_FILE)
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def save_syncstate(local_root, remote_tree_sha, local_files):
+    """保存同步状态快照：远程 tree SHA + 本地所有文件的 blob SHA 映射。"""
+    path = os.path.join(local_root, SYNCSTATE_FILE)
+    snapshot = {
+        'remote_tree_sha': remote_tree_sha,
+        'last_sync': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'file_blobs': {rel: info[3] for rel, info in local_files.items()}
+    }
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+
+
+def diff_remote_vs_snapshot(remote_tree, syncstate):
+    """对比当前远程 tree vs 上次同步快照，返回远程有变更的文件列表。
+
+    比较 remote_tree[*].blob_sha vs syncstate.file_blobs[*]，
+    SHA 不同的文件说明远程有变更（另一终端推送了更新）。
+    """
+    if not syncstate or 'file_blobs' not in syncstate:
+        return []
+    last_blobs = syncstate['file_blobs']
+    changed = []
+    for path, remote_blob in remote_tree.items():
+        if path not in last_blobs:
+            # 远程新增的文件
+            changed.append(path)
+        elif last_blobs[path] != remote_blob:
+            # 远程 blob 变了
+            changed.append(path)
+    return changed
+
+
 def pull_file(owner, repo, file_path, token, local_root, branch='main'):
     """从远程下载文件到本地"""
     base_url = f'https://api.github.com/repos/{owner}/{repo}'
@@ -234,14 +285,19 @@ def push_file(owner, repo, file_path, content_bytes, remote_blob_sha, token, bra
 
 
 def main(local_root, owner, repo, token, branch='main', mode='sync', filter_files=None):
-    """双向同步主流程 v2.1 — Git blob SHA 对比 + log.md 优先裁定"""
-    print(f"=== Fact Hub Sync v2.1 ===")
+    """双向同步主流程 v2.2 — .syncstate 远程变更哨兵 + Git blob SHA 对比 + log.md 优先裁定"""
+    print(f"=== Fact Hub Sync v2.2 ===")
     print(f"Local: {local_root}")
     print(f"Remote: {owner}/{repo} ({branch})")
     print(f"Mode: {mode}")
     if filter_files:
-        print(f"Incremental: only scanning {len(filter_files)} files + log.md, README.md")
+        print(f"Local changes: {len(filter_files)} files (from log.md)")
     print()
+
+    # 0. 读取同步状态快照
+    syncstate = load_syncstate(local_root)
+    if syncstate:
+        print(f"SyncState: last sync at {syncstate.get('last_sync', 'unknown')}")
 
     # 1. 验证 token
     ok, user = verify_token(token)
@@ -256,20 +312,45 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
         return
     print(f"Local root OK")
 
-    # 3. 扫描本地（增量模式下仅扫描变更文件）
-    local_files = scan_local_files(local_root, filter_files)
-    print(f"Local files: {len(local_files)}")
-
-    # 4. 获取远程树
-    remote_tree, err = get_remote_tree(owner, repo, token, branch)
+    # 3. 获取远程树（含 tree_sha）
+    remote_tree, remote_tree_sha, err = get_remote_tree(owner, repo, token, branch)
     if err:
         print(f"Warning: Could not get remote tree: {err}")
-    print(f"Remote blobs: {len(remote_tree)}")
+    print(f"Remote blobs: {len(remote_tree)}, tree SHA: {remote_tree_sha[:8] if remote_tree_sha else 'N/A'}")
 
-    # 5. 对比（只做分类，不裁定方向）
+    # 4. 远程变更哨兵检测 (v2.2)
+    #    若 .syncstate 存在且远程 tree SHA 未变 → 远程无变更，维持现有增量
+    #    若 tree SHA 变化 → 从快照 diff 定位远程变更文件，补充到扫描列表
+    remote_changed_files = set()
+    if syncstate and remote_tree_sha and remote_tree_sha != syncstate.get('remote_tree_sha'):
+        remote_changed_files = set(diff_remote_vs_snapshot(remote_tree, syncstate))
+        if remote_changed_files:
+            print(f"Remote tree SHA changed → {len(remote_changed_files)} remote file(s) differ from last sync:")
+            for f in sorted(remote_changed_files)[:10]:
+                print(f"  REMOTE-CHANGED: {f}")
+            if len(remote_changed_files) > 10:
+                print(f"  ... and {len(remote_changed_files) - 10} more")
+    elif syncstate:
+        print(f"Remote tree SHA unchanged → no remote-side changes, local-only incremental")
+    else:
+        print(f"No .syncstate → full scan (first sync on this terminal)")
+
+    # 5. 合并扫描列表：本地增量 + 远程变更
+    effective_filter = None
+    if filter_files is not None or remote_changed_files:
+        effective_filter = set(filter_files or [])
+        effective_filter |= remote_changed_files
+        effective_filter = list(effective_filter)
+        print(f"Effective scan: {len(effective_filter)} files (local {len(filter_files or [])} + remote {len(remote_changed_files)})")
+
+    # 6. 扫描本地
+    local_files = scan_local_files(local_root, effective_filter)
+    print(f"Local files scanned: {len(local_files)}")
+
+    # 7. 对比（只做分类，不裁定方向）
     local_only = []
     remote_only = []
-    remote_deleted_locally = []  # v2.0: 远端存在但本地已删除
+    remote_deleted_locally = []
     conflict = []
     skipped = []
 
@@ -278,7 +359,6 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
             local_only.append(rel_path)
             print(f"  LOCAL: {rel_path}")
             continue
-        # remote_tree 存储的就是 Git blob SHA，本地计算后直接对比，0 次 API 调用
         if remote_tree[rel_path] == git_blob_sha:
             skipped.append(rel_path)
         else:
@@ -289,7 +369,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
             remote_only.append(path)
             print(f"  REMOTE: {path}")
 
-    # 6. log.md 优先裁定冲突方向 (v2.1)
+    # 8. log.md 优先裁定冲突方向
     pull_from_conflict = []
     push_from_conflict = []
     tie_conflict = []
@@ -305,12 +385,10 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
 
         remote_log_time, remote_log_sha1 = get_remote_log_time_and_sha1(owner, repo, token, branch)
 
-        # 检查两边 log.md 的 SHA1 是否一致
         if 'log.md' in local_files and remote_log_sha1 and local_files['log.md'][1] == remote_log_sha1:
             log_sha1_match = True
 
         if log_sha1_match:
-            # log.md 一致 → 快速路径：两边知识库状态相同，其余文件差异视为非实质性，跳过
             print(f"  LOG: log.md identical → fast path, treating {len(conflict)} conflicts as skipped")
             tie_conflict.extend(conflict)
         elif local_log_time and remote_log_time:
@@ -322,7 +400,6 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
                 push_from_conflict.extend(conflict)
             else:
                 print(f"  LOG: same timestamp → fallback to per-file commit time")
-                # 回退：逐文件 commit 时间比较
                 for rel_path in conflict:
                     _, _, local_mtime, _ = local_files[rel_path]
                     local_dt = datetime.fromtimestamp(local_mtime, tz=timezone.utc)
@@ -337,7 +414,6 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
                         push_from_conflict.append(rel_path)
                         print(f"    CONFLICT -> PUSH: {rel_path}")
         else:
-            # log.md 不存在 → 回退逐文件 commit 时间
             print(f"  LOG: unavailable → fallback to per-file commit time")
             for rel_path in conflict:
                 _, _, local_mtime, _ = local_files[rel_path]
@@ -349,11 +425,6 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
                     pull_from_conflict.append(rel_path)
                 else:
                     push_from_conflict.append(rel_path)
-
-    # 6b. v2.0: 检测远程有而本地已删除的文件
-    # 这些文件在第一次 sync 时被拉取到本地，后来用户通过 git 手动删除
-    # 默认不自动删除远程（安全考虑），仅在 --allow-delete 模式下执行
-    # 即使不删除，也会在 SUMMARY 中列出供用户知晓
 
     # 汇总
     to_push = local_only + push_from_conflict
@@ -372,7 +443,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
     elif mode == 'pull':
         to_push = []
 
-    # 7. 先拉取（远程优先），再推送
+    # 9. 先拉取（远程优先），再推送
     pull_ok = 0
     pull_fail = []
     if to_pull:
@@ -403,7 +474,20 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
                 print(f"  FAIL: {rel_path} -> {result}")
                 push_fail.append((rel_path, result))
 
-    # 8. 结果
+    # 10. 更新 .syncstate（拉取后需要重新扫描以获取最新 blob SHA）
+    #     仅当有实际同步操作时才更新
+    if to_pull or to_push:
+        updated_local = scan_local_files(local_root, None)  # 全量重新扫描（确保拉取后的文件 hash 准确）
+        if remote_tree_sha:
+            save_syncstate(local_root, remote_tree_sha, updated_local)
+            print(f"\n.syncstate updated (tree: {remote_tree_sha[:8]}..., {len(updated_local)} files)")
+    elif syncstate is None and remote_tree_sha:
+        # 首次运行且无变更 → 建立初始快照
+        all_local = scan_local_files(local_root, None)
+        save_syncstate(local_root, remote_tree_sha, all_local)
+        print(f"\n.syncstate initialized (tree: {remote_tree_sha[:8]}..., {len(all_local)} files)")
+
+    # 11. 结果
     result = {
         'success': len(pull_fail) == 0 and len(push_fail) == 0,
         'message': f'Pull {pull_ok}/{len(to_pull)}, Push {push_ok}/{len(to_push)}',
@@ -418,7 +502,8 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
             'pushed': push_ok,
             'pull_failed': len(pull_fail),
             'push_failed': len(push_fail),
-            'skipped': len(skipped)
+            'skipped': len(skipped),
+            'remote_changed_detected': len(remote_changed_files)
         }
     }
     if remote_deleted_locally:
@@ -435,7 +520,7 @@ def main(local_root, owner, repo, token, branch='main', mode='sync', filter_file
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='Fact Hub Sync - Bidirectional v2.1')
+    parser = argparse.ArgumentParser(description='Fact Hub Sync - Bidirectional v2.2')
     parser.add_argument('--local-root', required=True)
     parser.add_argument('--owner', required=True)
     parser.add_argument('--repo', required=True)
@@ -443,7 +528,7 @@ if __name__ == '__main__':
     parser.add_argument('--branch', default='main')
     parser.add_argument('--mode', default='sync', choices=['sync', 'push', 'pull'])
     parser.add_argument('--allow-delete', action='store_true', help='Allow deletion of remote files that were deleted locally (requires user confirmation)')
-    parser.add_argument('--files', default=None, help='Comma-separated list of changed file paths for incremental sync (skips full scan of unchanged files)')
+    parser.add_argument('--files', default=None, help='Comma-separated list of locally-changed file paths from log.md (optional; sync.py internally cross-checks with .syncstate for remote changes)')
     args = parser.parse_args()
     filter_files = [f.strip() for f in args.files.split(',') if f.strip()] if args.files else None
     main(args.local_root, args.owner, args.repo, args.token, args.branch, args.mode, filter_files)
